@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { TEAM } from "@/lib/teams";
+import Flag from "./Flag";
 
 export default function QuickPanel({ id, onClose }) {
   const t = TEAM[id];
@@ -9,7 +10,7 @@ export default function QuickPanel({ id, onClose }) {
     <div className="qp-back" onClick={onClose}>
       <div className="qp" onClick={e => e.stopPropagation()}>
         <div className="hd">
-          <span style={{ fontSize: 36 }}>{t.flag}</span>
+          <Flag id={id} size={52} radius={6} />
           <div>
             <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 21, textTransform: "uppercase" }}>{t.name}</div>
             <div className="mono-dim" style={{ letterSpacing: ".1em" }}>GROUP {t.group} · FIFA RANK #{t.rank}</div>
