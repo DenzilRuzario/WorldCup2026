@@ -5,8 +5,28 @@ import { TEAM, DETAILS } from "@/lib/teams";
 import { useMatches, statusOf } from "@/components/useMatches";
 import MatchCard from "@/components/MatchCard";
 import QuickPanel from "@/components/QuickPanel";
+import Flag from "@/components/Flag";
 
 const POS = { GK: "Goalkeepers", DF: "Defenders", MF: "Midfielders", FW: "Forwards" };
+
+/* Renders only if the image actually exists in /public/people/ */
+function Avatar({ src, green }) {
+  const [ok, setOk] = useState(true);
+  if (!ok) return null;
+  return <img src={src} alt="" className={`avatar${green ? " green" : ""}`} onError={() => setOk(false)} />;
+}
+
+/* Frosted squad-photo background — activates when /public/teams/{id}.jpg exists */
+function TeamBackdrop({ id }) {
+  const [ok, setOk] = useState(true);
+  if (!ok) return null;
+  return (
+    <div className="team-bg">
+      <img src={`/teams/${id}.jpg`} alt="" onError={() => setOk(false)} />
+      <div className="frost" />
+    </div>
+  );
+}
 
 export default function TeamPage({ params }) {
   const { id } = params;
@@ -23,10 +43,12 @@ export default function TeamPage({ params }) {
   const past = mine.filter(m => statusOf(m, now) === "ft");
 
   return (
-    <main className="wrap" style={{ padding: "24px 20px 40px" }}>
+    <main className="wrap" style={{ padding: "24px 20px 40px", position: "relative" }}>
+      <TeamBackdrop id={id} />
       <Link href="/teams" className="mono-dim" style={{ fontSize: 11.5 }}>← All teams</Link>
+
       <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", margin: "18px 0 24px" }}>
-        <span style={{ fontSize: 62, filter: "drop-shadow(0 6px 18px rgba(0,0,0,.6))" }}>{t.flag}</span>
+        <Flag id={id} size={86} radius={8} />
         <div>
           <h1 className="h1">{t.name}</h1>
           <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
@@ -48,21 +70,38 @@ export default function TeamPage({ params }) {
         <div className="grid fit-260" style={{ marginTop: 26 }}>
           <div className="card" style={{ borderColor: "rgba(232,179,57,.35)" }}>
             <div className="lbl">★ Player to watch</div>
-            <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 20, textTransform: "uppercase" }}>{d.ptw.n}</div>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--gold)", margin: "3px 0 8px" }}>{d.ptw.c}</div>
-            <p className="body2" style={{ fontSize: 13 }}>{d.ptw.why}</p>
+            <div className="person-row">
+              <Avatar src={`/people/${id}-ptw.jpg`} />
+              <div>
+                <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 20, textTransform: "uppercase" }}>{d.ptw.n}</div>
+                <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--gold)", margin: "3px 0" }}>{d.ptw.c}</div>
+              </div>
+            </div>
+            <p className="body2" style={{ fontSize: 13, marginTop: 8 }}>{d.ptw.why}</p>
           </div>
           <div className="card" style={{ borderColor: "rgba(52,232,107,.35)" }}>
             <div className="lbl">↗ Breakout candidate</div>
-            <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 20, textTransform: "uppercase" }}>{d.bo.n}</div>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--green)", margin: "3px 0 8px" }}>{d.bo.c}</div>
-            <p className="body2" style={{ fontSize: 13 }}>{d.bo.why}</p>
+            <div className="person-row">
+              <Avatar src={`/people/${id}-breakout.jpg`} green />
+              <div>
+                <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 20, textTransform: "uppercase" }}>{d.bo.n}</div>
+                <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--green)", margin: "3px 0" }}>{d.bo.c}</div>
+              </div>
+            </div>
+            <p className="body2" style={{ fontSize: 13, marginTop: 8 }}>{d.bo.why}</p>
           </div>
           <div className="card">
             <div className="lbl">Coaching staff</div>
-            <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 18, textTransform: "uppercase" }}>{d.coach}</div>
-            <div className="mono-dim" style={{ margin: "3px 0 8px" }}>HEAD COACH</div>
-            {d.assts.map(a => <div key={a} className="body2" style={{ fontSize: 13 }}>{a} · assistant</div>)}
+            <div className="person-row">
+              <Avatar src={`/people/${id}-coach.jpg`} />
+              <div>
+                <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 18, textTransform: "uppercase" }}>{d.coach}</div>
+                <div className="mono-dim" style={{ margin: "3px 0" }}>HEAD COACH</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              {d.assts.map(a => <div key={a} className="body2" style={{ fontSize: 13 }}>{a} · assistant</div>)}
+            </div>
           </div>
         </div>
 
