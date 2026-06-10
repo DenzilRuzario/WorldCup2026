@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { T, TEAM } from "@/lib/teams";
 import { getSupabase } from "@/lib/supabase";
 import { useMatches, statusOf, fmtDay, fmtTime } from "@/components/useMatches";
+import Flag from "@/components/Flag";
 
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -20,7 +21,9 @@ function PredCard({ m, now }) {
 
   useEffect(() => {
     setMyPick(lsGet(`vote:${m.id}`));
-    setForm(f => ({ ...f, name: lsGet("myname") || "" }));
+    const prior = lsGet(`pred:${m.id}`);
+    if (prior) { setSaved(true); setForm(f => ({ ...f, name: prior.name })); }
+    else setForm(f => ({ ...f, name: lsGet("myname") || "" }));
     const sb = getSupabase();
     if (!sb) { setSbErr("Supabase not configured"); return; }
     (async () => {
@@ -49,7 +52,7 @@ function PredCard({ m, now }) {
   };
 
   const lockScore = async () => {
-    if (!form.name.trim() || form.h === "" || form.a === "" || busy) return;
+    if (!form.name.trim() || form.h === "" || form.a === "" || busy || saved) return;
     const sb = getSupabase();
     if (!sb) return;
     setBusy(true);
@@ -62,7 +65,10 @@ function PredCard({ m, now }) {
     if (!error) {
       setSaved(true);
       lsSet("myname", form.name.trim());
+      lsSet(`pred:${m.id}`, { name: form.name.trim(), h: +form.h, a: +form.a });
       setPredCount(c => c + 1);
+    } else if (error.code === "23505") {
+      setSbErr(`A prediction under the name "${form.name.trim()}" already exists for this match.`);
     } else {
       setSbErr(error.message);
     }
@@ -81,11 +87,11 @@ function PredCard({ m, now }) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 28 }}>{H.flag}</span>
+        <Flag id={m.h} size={40} />
         <span style={{ fontFamily: "var(--disp)", fontWeight: 800, fontSize: 14, textTransform: "uppercase" }}>{H.name}</span>
         <span className="vs">VS</span>
         <span style={{ fontFamily: "var(--disp)", fontWeight: 800, fontSize: 14, textTransform: "uppercase" }}>{A.name}</span>
-        <span style={{ fontSize: 28 }}>{A.flag}</span>
+        <Flag id={m.a} size={40} />
       </div>
 
       {sbErr && (
@@ -161,9 +167,9 @@ function RecapCard({ m }) {
         <span className="badge ft">FT</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 14 }}>
-        <span style={{ fontSize: 26 }}>{H.flag}</span>
+        <Flag id={m.h} size={38} />
         <span style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 28 }}>{m.hs} <span style={{ color: "var(--txt3)", fontSize: 18 }}>–</span> {m.as}</span>
-        <span style={{ fontSize: 26 }}>{A.flag}</span>
+        <Flag id={m.a} size={38} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <div style={{ background: "var(--navy1)", border: "1px solid var(--line)", borderRadius: 10, padding: 11 }}>
@@ -201,7 +207,9 @@ function Ballot() {
   const [sbErr, setSbErr] = useState(null);
 
   useEffect(() => {
-    setName(lsGet("myname") || "");
+    const prior = lsGet("ballotDone");
+    if (prior) { setDone(true); setName(prior); }
+    else setName(lsGet("myname") || "");
     const sb = getSupabase();
     if (!sb) { setSbErr("Supabase not configured — check Vercel env vars."); return; }
     (async () => {
@@ -221,7 +229,10 @@ function Ballot() {
     if (!error) {
       setDone(true);
       lsSet("myname", name.trim());
+      lsSet("ballotDone", name.trim());
       setAll(a => [...(a || []), { name: name.trim(), picks }]);
+    } else if (error.code === "23505") {
+      setSbErr(`A ballot under the name "${name.trim()}" already exists.`);
     } else {
       setSbErr(error.message);
     }
