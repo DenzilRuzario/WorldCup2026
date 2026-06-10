@@ -5,6 +5,8 @@ import { TEAM } from "@/lib/teams";
 import { useMatches, statusOf, fmtDay } from "@/components/useMatches";
 import MatchCard from "@/components/MatchCard";
 import QuickPanel from "@/components/QuickPanel";
+import Flag from "@/components/Flag";
+import Trophy from "@/components/Trophy";
 
 const SPOTLIGHT = ["bra", "ger", "arg", "fra"];
 
@@ -23,18 +25,18 @@ export default function Home() {
   return (
     <main>
       <div className="hero">
-        <span className="troph">🏆</span>
-        <div className="wrap" style={{ padding: 0, maxWidth: 1100, margin: "0 auto" }}>
+        <span className="troph"><Trophy size={120} /></span>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div className="eyebrow">JUN 11 — JUL 19 · USA · CANADA · MEXICO</div>
           <h1>The World<br />United by <span className="g">Football</span></h1>
-          <p>Live matches, team guides and fan predictions for the FIFA World Cup 2026.</p>
+          <p>Live scores, team guides and fan predictions for the FIFA World Cup 2026.</p>
           <Link href="/predictions" className="btn-g">Make your predictions</Link>
         </div>
       </div>
 
       <div className="wrap" style={{ paddingBottom: 30 }}>
         <div className="sec-h">
-          <h2>{today.length ? "Today's Matches" : "Next Matches"}</h2>
+          <h2>{live.length ? "Live Scores" : today.length ? "Today's Matches" : "Next Matches"}</h2>
           <Link href="/predictions" style={{ color: "var(--green)", fontFamily: "var(--mono)", fontSize: 11 }}>Predict →</Link>
         </div>
         {loading
@@ -46,13 +48,13 @@ export default function Home() {
           <div className="grid auto-220">
             {results.map(m => (
               <div key={m.id} className="card lift" style={{ padding: "10px 13px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }} className="mono-dim">
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontFamily: "var(--mono)", color: "var(--txt2)", fontWeight: 700 }}>
                   <span>{m.group ? `GRP ${m.group}` : ""} · {fmtDay(m.ko)}</span><span>FT</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: "var(--disp)", fontWeight: 800, fontSize: 13, textTransform: "uppercase", marginTop: 7 }}>
-                  <span>{TEAM[m.h].flag} {m.h.toUpperCase()}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: "var(--disp)", fontWeight: 800, fontSize: 13, textTransform: "uppercase", marginTop: 8, gap: 8 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 7 }}><Flag id={m.h} size={26} radius={3} /> {m.h.toUpperCase()}</span>
                   <span style={{ fontFamily: "var(--mono)", color: "var(--gold)" }}>{m.hs} – {m.as}</span>
-                  <span>{m.a.toUpperCase()} {TEAM[m.a].flag}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 7 }}>{m.a.toUpperCase()} <Flag id={m.a} size={26} radius={3} /></span>
                 </div>
               </div>
             ))}
@@ -65,7 +67,7 @@ export default function Home() {
             const t = TEAM[id];
             return (
               <div key={id} className="card lift">
-                <div style={{ fontSize: 40, marginBottom: 8 }}>{t.flag}</div>
+                <div style={{ marginBottom: 12 }}><Flag id={id} size={64} radius={6} /></div>
                 <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 17, textTransform: "uppercase" }}>{t.name}</div>
                 <div className="mono-dim" style={{ margin: "5px 0 12px" }}>{t.titles}× World Cup winner · {t.apps} appearances</div>
                 <button className="btn-g sm" onClick={() => setQuick(id)}>View team</button>
