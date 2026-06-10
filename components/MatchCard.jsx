@@ -1,5 +1,6 @@
 "use client";
 import { TEAM } from "@/lib/teams";
+import Flag from "./Flag";
 import { statusOf, fmtTime, fmtDay, countdown } from "./useMatches";
 
 const Badge = ({ s, minute }) =>
@@ -19,13 +20,13 @@ export default function MatchCard({ m, now, onTeam }) {
       </div>
       <div className="mid">
         <button className="side" onClick={() => onTeam && onTeam(m.h)}>
-          <span className="flag">{TEAM[m.h].flag}</span><span className="tn">{TEAM[m.h].name}</span>
+          <Flag id={m.h} size={44} /><span className="tn">{TEAM[m.h].name}</span>
         </button>
         {hasScore
           ? <span className="score">{m.hs}<span className="dash">–</span>{m.as}</span>
           : <span className="vs">VS</span>}
         <button className="side" onClick={() => onTeam && onTeam(m.a)}>
-          <span className="flag">{TEAM[m.a].flag}</span><span className="tn">{TEAM[m.a].name}</span>
+          <Flag id={m.a} size={44} /><span className="tn">{TEAM[m.a].name}</span>
         </button>
       </div>
       <div className={`foot${s === "live" ? " live" : ""}`}>
