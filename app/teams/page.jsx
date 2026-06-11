@@ -1,12 +1,46 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { GROUPS, T, GROUP_OVERVIEWS } from "@/lib/teams";
 import Flag from "@/components/Flag";
 
+function OverviewModal({ g, onClose }) {
+  useEffect(() => {
+    const onKey = e => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const text = GROUP_OVERVIEWS[g];
+  return (
+    <div className="qp-back" onClick={onClose}>
+      <div className="qp" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+        <div className="hd" style={{ marginBottom: 10 }}>
+          <div>
+            <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 21, textTransform: "uppercase" }}>
+              Group {g} <span style={{ color: "var(--green)" }}>Overview</span>
+            </div>
+            <div className="mono-dim" style={{ letterSpacing: ".1em", marginTop: 3 }}>
+              {GROUPS.find(x => x.g === g).teams.map(t => t.name).join(" · ").toUpperCase()}
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Close"
+            style={{ marginLeft: "auto", background: "var(--navy1)", border: "1px solid var(--line)", borderRadius: "50%", width: 32, height: 32, color: "var(--txt2)", fontSize: 14, cursor: "pointer", flexShrink: 0 }}>✕</button>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          {GROUPS.find(x => x.g === g).teams.map(t => <Flag key={t.id} id={t.id} size={36} radius={4} />)}
+        </div>
+        {text
+          ? <p className="body2" style={{ fontSize: 14, lineHeight: 1.65 }}>{text}</p>
+          : <p className="mono-dim">Overview for Group {g} is on its way.</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function Teams() {
   const [filter, setFilter] = useState("ALL");
   const [q, setQ] = useState("");
+  const [ov, setOv] = useState(null);
   const router = useRouter();
 
   const query = q.trim().toLowerCase();
@@ -51,10 +85,10 @@ export default function Teams() {
           <div className="grid auto-240" style={{ marginTop: 10 }}>
             {shown.map(({ g, teams }) => (
               <div key={g} className="gcard">
-                <div className="gh">Group {g}</div>
-                {GROUP_OVERVIEWS[g] && (
-                  <p className="body2" style={{ fontSize: 12.5, margin: "0 0 13px", lineHeight: 1.55 }}>{GROUP_OVERVIEWS[g]}</p>
-                )}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 13 }}>
+                  <div className="gh" style={{ marginBottom: 0 }}>Group {g}</div>
+                  <button className="ov-btn" onClick={() => setOv(g)}>Overview</button>
+                </div>
                 {teams.map(t => (
                   <button key={t.id} className="tchip lift" onClick={() => router.push(`/teams/${t.id}`)}>
                     <Flag id={t.id} size={30} radius={4} />
@@ -66,6 +100,7 @@ export default function Teams() {
           </div>
         </>}
       </div>
+      {ov && <OverviewModal g={ov} onClose={() => setOv(null)} />}
     </main>
   );
 }
