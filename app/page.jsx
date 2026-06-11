@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { TEAM } from "@/lib/teams";
 import { useMatches, statusOf, fmtDay } from "@/components/useMatches";
 import MatchCard from "@/components/MatchCard";
 import QuickPanel from "@/components/QuickPanel";
+import MatchPanel from "@/components/MatchPanel";
 import Flag from "@/components/Flag";
 import Trophy from "@/components/Trophy";
 
@@ -13,35 +14,49 @@ const SPOTLIGHT = ["bra", "ger", "arg", "fra"];
 export default function Home() {
   const { matches, source, loading } = useMatches();
   const [quick, setQuick] = useState(null);
+  const [panel, setPanel] = useState(null);
+  const [shrunk, setShrunk] = useState(false);
   const now = new Date();
 
+  // hero text fades after 5 seconds — stadium stays
+  useEffect(() => { const t = setTimeout(() => setShrunk(true), 5000); return () => clearTimeout(t); }, []);
+
   const live = matches.filter(m => statusOf(m, now) === "live");
-  const today = matches.filter(m => new Date(m.ko).toDateString() === now.toDateString());
+  const today = matches.filter(m => new Date(m.ko).toDateString() === now.toDateString() && statusOf(m, now) !== "live");
   const upcoming = matches.filter(m => statusOf(m, now) === "up").slice(0, 6);
-  const headline = today.length ? today : upcoming.slice(0, 3);
-  const shown = [...live.filter(m => !headline.includes(m)), ...headline].slice(0, 6);
+  const rest = (today.length ? today : upcoming.slice(0, 3)).filter(m => !live.includes(m)).slice(0, 6);
   const results = matches.filter(m => statusOf(m, now) === "ft").slice(-4).reverse();
 
   return (
     <main>
-      <div className="hero">
-        <span className="troph"><Trophy size={120} /></span>
+      <div className={`hero${shrunk ? " shrunk" : ""}`}>
+        <span className="troph" style={shrunk ? { display: "none" } : undefined}><Trophy size={120} /></span>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-          <div className="eyebrow">JUN 11 — JUL 19 · USA · CANADA · MEXICO</div>
-          <h1>The World<br />United by <span className="g">Football</span></h1>
-          <p>Live scores, team guides and fan predictions for the FIFA World Cup 2026.</p>
-          <Link href="/predictions" className="btn-g">Make your predictions</Link>
+          <div className="strip">🏆 World Cup 2026 <span className="g">·</span> Jun 11 — Jul 19 <span className="g">·</span> USA · Canada · Mexico</div>
+          <div className="hero-inner">
+            <div className="eyebrow">JUN 11 — JUL 19 · USA · CANADA · MEXICO</div>
+            <h1>The World<br />United by <span className="g">Football</span></h1>
+            <p>Live scores, team guides and fan predictions for the FIFA World Cup 2026.</p>
+            <Link href="/predictions" className="btn-g">Make your predictions</Link>
+          </div>
         </div>
       </div>
 
       <div className="wrap" style={{ paddingBottom: 30 }}>
+        {live.length > 0 && <>
+          <div className="sec-h"><h2>Live Scores</h2><span className="badge live">LIVE</span></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {live.map(m => <MatchCard key={m.id} m={m} now={now} onTeam={setQuick} onOpen={setPanel} big />)}
+          </div>
+        </>}
+
         <div className="sec-h">
-          <h2>{live.length ? "Live Scores" : today.length ? "Today's Matches" : "Next Matches"}</h2>
+          <h2>{live.length ? "More Matches" : today.length ? "Today's Matches" : "Next Matches"}</h2>
           <Link href="/predictions" style={{ color: "var(--green)", fontFamily: "var(--mono)", fontSize: 11 }}>Predict →</Link>
         </div>
         {loading
           ? <p className="mono-dim">Loading fixtures…</p>
-          : <div className="grid auto-280">{shown.map(m => <MatchCard key={m.id} m={m} now={now} onTeam={setQuick} />)}</div>}
+          : <div className="grid auto-280">{rest.map(m => <MatchCard key={m.id} m={m} now={now} onTeam={setQuick} onOpen={setPanel} />)}</div>}
 
         {results.length > 0 && <>
           <div className="sec-h"><h2>Recent Results</h2></div>
@@ -78,6 +93,7 @@ export default function Home() {
         {source === "sample" && <p className="mono-dim" style={{ marginTop: 18 }}>Showing sample fixtures — add your FOOTBALL_DATA_API_KEY for live data.</p>}
       </div>
       {quick && <QuickPanel id={quick} onClose={() => setQuick(null)} />}
+      {panel && <MatchPanel m={matches.find(x => x.id === panel.id) || panel} now={now} onClose={() => setPanel(null)} />}
     </main>
   );
 }
