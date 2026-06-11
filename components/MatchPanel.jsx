@@ -160,7 +160,7 @@ export default function MatchPanel({ m, now, onClose }) {
       } catch { if (alive) setLineups([]); }
     };
     load();
-    const t = setInterval(load, 120000);
+    const t = setInterval(load, 300000);
     return () => { alive = false; clearInterval(t); };
   }, [m.afId, s]);
 
