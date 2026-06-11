@@ -61,14 +61,24 @@ export default function TeamPage({ params }) {
 
       {d ? <>
         <div className="sec-h"><h2>Team Overview</h2></div>
+        {d.intro && <p className="body2" style={{ fontSize: 15, lineHeight: 1.65, maxWidth: 760, marginBottom: 18 }}>{d.intro}</p>}
         <div className="grid fit-240">
           {[["Style of play", d.style], ["Strengths", d.strengths], ["Weaknesses", d.weaknesses], ["Tournament outlook", d.outlook]].map(([l, v]) => (
             <div key={l} className="card"><div className="lbl">{l}</div><p className="body2">{v}</p></div>
           ))}
         </div>
 
-        <div className="grid fit-260" style={{ marginTop: 26 }}>
-          <div className="card" style={{ borderColor: "rgba(232,179,57,.35)" }}>
+        {d.keyPlayers && <>
+          <div className="sec-h"><h2>Key Players</h2></div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {d.keyPlayers.map(p => (
+              <span key={p} style={{ fontFamily: "var(--disp)", fontWeight: 700, fontSize: 13, color: "var(--txt)", background: "var(--navy2)", border: "1px solid var(--line)", borderRadius: 99, padding: "9px 17px" }}>{p}</span>
+            ))}
+          </div>
+        </>}
+
+        {(d.ptw || d.bo || d.coach) && <div className="grid fit-260" style={{ marginTop: 26 }}>
+          {d.ptw && <div className="card" style={{ borderColor: "rgba(232,179,57,.35)" }}>
             <div className="lbl">★ Player to watch</div>
             <div className="person-row">
               <Avatar src={`/people/${id}-ptw.jpg`} />
@@ -78,8 +88,8 @@ export default function TeamPage({ params }) {
               </div>
             </div>
             <p className="body2" style={{ fontSize: 13, marginTop: 8 }}>{d.ptw.why}</p>
-          </div>
-          <div className="card" style={{ borderColor: "rgba(52,232,107,.35)" }}>
+          </div>}
+          {d.bo && <div className="card" style={{ borderColor: "rgba(52,232,107,.35)" }}>
             <div className="lbl">↗ Breakout candidate</div>
             <div className="person-row">
               <Avatar src={`/people/${id}-breakout.jpg`} green />
@@ -89,8 +99,8 @@ export default function TeamPage({ params }) {
               </div>
             </div>
             <p className="body2" style={{ fontSize: 13, marginTop: 8 }}>{d.bo.why}</p>
-          </div>
-          <div className="card">
+          </div>}
+          {d.coach && <div className="card">
             <div className="lbl">Coaching staff</div>
             <div className="person-row">
               <Avatar src={`/people/${id}-coach.jpg`} />
@@ -100,11 +110,12 @@ export default function TeamPage({ params }) {
               </div>
             </div>
             <div style={{ marginTop: 8 }}>
-              {d.assts.map(a => <div key={a} className="body2" style={{ fontSize: 13 }}>{a} · assistant</div>)}
+              {(d.assts || []).map(a => <div key={a} className="body2" style={{ fontSize: 13 }}>{a} · assistant</div>)}
             </div>
-          </div>
-        </div>
+          </div>}
+        </div>}
 
+        {d.squad && d.squad.length > 0 ? <>
         <div className="sec-h"><h2>Squad</h2></div>
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           {["GK", "DF", "MF", "FW"].map(p => {
@@ -125,6 +136,9 @@ export default function TeamPage({ params }) {
           })}
         </div>
         <p className="mono-dim" style={{ marginTop: 8, fontSize: 10 }}>Sample squad — final 26-man lists drop closer to kickoff.</p>
+        </> : (
+          <p className="mono-dim" style={{ margin: "16px 0" }}>Full squad list coming soon for {t.name}.</p>
+        )}
       </> : (
         <div className="card" style={{ borderStyle: "dashed", margin: "10px 0" }}>
           <div className="lbl">Scouting report</div>
