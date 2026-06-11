@@ -298,10 +298,11 @@ export default function Predictions() {
 
   const now = new Date();
   const allUp = matches.filter(m => statusOf(m, now) === "up" && m.h && m.a);
-  // Predictions open only for the next matchday (e.g. Matchday 1 while it's in progress)
-  const mds = allUp.map(m => m.matchday).filter(x => x != null);
-  const nextMd = mds.length ? Math.min(...mds) : null;
-  const up = nextMd != null ? allUp.filter(m => m.matchday === nextMd) : allUp.slice(0, 10);
+  // Rolling window: only matches kicking off within the next 48 hours are open for prediction
+  const WINDOW_HOURS = 48;
+  const windowEnd = new Date(now.getTime() + WINDOW_HOURS * 3600 * 1000);
+  const up = allUp.filter(m => new Date(m.ko) <= windowEnd);
+  const nextUp = allUp.find(m => new Date(m.ko) > windowEnd);
   const done = matches.filter(m => statusOf(m, now) === "ft" && m.h && m.a && m.hs !== null).slice(-9).reverse();
   const configured = !!getSupabase();
 
@@ -326,12 +327,12 @@ export default function Predictions() {
         ))}
       </div>
       {tab === "up" && (loading ? <p className="mono-dim">Loading fixtures…</p> : <>
-        {nextMd != null && (
-          <div className="mono-dim" style={{ marginBottom: 14, fontSize: 11, letterSpacing: ".1em" }}>
-            ⚽ PREDICTIONS OPEN FOR MATCHDAY {nextMd} ONLY — LATER ROUNDS UNLOCK AS THE TOURNAMENT PROGRESSES
-          </div>
-        )}
-        <div className="grid auto-300">{up.map(m => <PredCard key={m.id} m={m} now={now} name={name} />)}</div>
+        <div className="mono-dim" style={{ marginBottom: 14, fontSize: 11, letterSpacing: ".1em" }}>
+          ⚽ PREDICTIONS OPEN FOR MATCHES KICKING OFF IN THE NEXT {WINDOW_HOURS} HOURS — MORE UNLOCK AS KICKOFFS APPROACH
+        </div>
+        {up.length
+          ? <div className="grid auto-300">{up.map(m => <PredCard key={m.id} m={m} now={now} name={name} />)}</div>
+          : <p className="mono-dim">No matches in the next {WINDOW_HOURS} hours{nextUp ? ` — the next one kicks off ${new Date(nextUp.ko).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}.` : "."}</p>}
       </>)}
       {tab === "ft" && (done.length
         ? <div className="grid auto-300">{done.map(m => <RecapCard key={m.id} m={m} />)}</div>
