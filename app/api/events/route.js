@@ -1,19 +1,20 @@
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { afAllowed } from "@/lib/afQuota";
 
 export async function GET(req) {
   const fid = new URL(req.url).searchParams.get("fid");
   const key = process.env.API_FOOTBALL_KEY;
   if (!fid || !key) return NextResponse.json({ subs: [] });
-  if (!(await afAllowed())) return NextResponse.json({ subs: [] });
-  try {
+  const subs = await unstable_cache(async () => {
+    if (!(await afAllowed())) return [];
     const res = await fetch(
       `https://v3.football.api-sports.io/fixtures/events?fixture=${fid}`,
-      { headers: { "x-apisports-key": key }, next: { revalidate: 600 } }
+      { headers: { "x-apisports-key": key }, cache: "no-store" }
     );
-    if (!res.ok) return NextResponse.json({ subs: [] });
+    if (!res.ok) return [];
     const data = await res.json();
-    const subs = (data.response || [])
+    return (data.response || [])
       .filter(e => e.type === "subst")
       .map(e => ({
         minute: e.time?.elapsed ?? null,
@@ -21,8 +22,6 @@ export async function GET(req) {
         p1: e.player?.name || "",   // one of these is OFF, the other ON —
         p2: e.assist?.name || "",   // the panel resolves which by checking the starting XI
       }));
-    return NextResponse.json({ subs });
-  } catch {
-    return NextResponse.json({ subs: [] });
-  }
+  }, ["af-events", fid], { revalidate: 600 })().catch(() => []);
+  return NextResponse.json({ subs });
 }
