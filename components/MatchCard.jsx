@@ -11,7 +11,7 @@ const Badge = ({ s, minute }) =>
 function Side({ id, label, onTeam }) {
   if (id) {
     return (
-      <button className="side" onClick={() => onTeam && onTeam(id)}>
+      <button className="side" onClick={e => { e.stopPropagation(); onTeam && onTeam(id); }}>
         <Flag id={id} size={44} /><span className="tn">{TEAM[id].name}</span>
       </button>
     );
@@ -29,12 +29,17 @@ function Side({ id, label, onTeam }) {
   );
 }
 
-export default function MatchCard({ m, now, onTeam }) {
+export default function MatchCard({ m, now, onTeam, onOpen, big }) {
   const s = statusOf(m, now);
   const hasScore = s !== "up" && m.hs !== null && m.hs !== undefined;
   const label = m.group ? `GROUP ${m.group}` : (m.stage || "").replace(/_/g, " ");
+  // panel opens when live, or within 45 min of kickoff
+  const panelReady = s === "live" || (s === "up" && new Date(m.ko) - now <= 45 * 60000);
+  const open = e => { if (panelReady && onOpen) onOpen(m); };
   return (
-    <div className="mcard lift">
+    <div className={`mcard lift${big ? " mcard-big" : ""}`} onClick={open}
+      style={panelReady && onOpen ? { cursor: "pointer" } : undefined}
+      title={panelReady && onOpen ? "Tap for lineups" : undefined}>
       <div className="top">
         <span>{label} · {fmtDay(m.ko)} · {fmtTime(m.ko)}</span>
         <Badge s={s} minute={m.minute} />
@@ -47,7 +52,7 @@ export default function MatchCard({ m, now, onTeam }) {
         <Side id={m.a} label={m.aLabel} onTeam={onTeam} />
       </div>
       <div className={`foot${s === "live" ? " live" : ""}`}>
-        {s === "live" ? "▸ Live now" : s === "up" ? `Kickoff in ${countdown(m.ko, now)}` : (m.venue ? m.venue.split(",")[0] : "Full time")}
+        {s === "live" ? "▸ Live — tap for lineups" : s === "up" ? (panelReady ? `Kickoff in ${countdown(m.ko, now)} — tap for lineups` : `Kickoff in ${countdown(m.ko, now)}`) : (m.venue ? m.venue.split(",")[0] : "Full time")}
       </div>
     </div>
   );
