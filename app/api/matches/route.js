@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { T } from "@/lib/teams";
 import { FALLBACK } from "@/lib/fallback";
+import { afTeamId, afStatus } from "@/lib/afmap";
 
-// football-data.org TLAs map directly onto our team ids (uppercased).
 const TLA = Object.fromEntries(T.map(t => [t.id.toUpperCase(), t.id]));
 const NAME = Object.fromEntries(T.map(t => [t.name.toLowerCase(), t.id]));
 
@@ -14,7 +14,6 @@ const matchTeam = apiTeam => {
   if (!apiTeam) return null;
   if (apiTeam.tla && TLA[apiTeam.tla]) return TLA[apiTeam.tla];
   const n = (apiTeam.name || "").toLowerCase().trim();
-  // Empty or placeholder names ("TBD", "1A", "Winner Match 74") must NOT fuzzy-match.
   if (n.length < 4) return null;
   if (NAME[n]) return NAME[n];
   for (const t of T) {
@@ -23,40 +22,63 @@ const matchTeam = apiTeam => {
   }
   return null;
 };
-
-// Human-readable label for an unresolved knockout slot.
 const slotLabel = apiTeam => {
   const n = (apiTeam?.name || "").trim();
   return n && n.toLowerCase() !== "null" ? n : "TBD";
 };
 
-const fallbackPayload = () =>
-  NextResponse.json({ source: "sample", matches: FALLBACK });
+/* API-Football: today's fixtures (live status, scores, minute, fixture ids) */
+async function fetchAF() {
+  const key = process.env.API_FOOTBALL_KEY;
+  if (!key) return [];
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await fetch(
+      `https://v3.football.api-sports.io/fixtures?date=${today}`,
+      { headers: { "x-apisports-key": key }, next: { revalidate: 240 } }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.response || [])
+      .map(f => {
+        const h = afTeamId(f.teams?.home?.name), a = afTeamId(f.teams?.away?.name);
+        if (!h || !a || h === a) return null;
+        return {
+          h, a,
+          afId: f.fixture?.id,
+          ko: f.fixture?.date,
+          status: afStatus(f.fixture?.status?.short),
+          minute: f.fixture?.status?.elapsed ?? null,
+          hs: f.goals?.home ?? null,
+          as: f.goals?.away ?? null,
+        };
+      })
+      .filter(Boolean);
+  } catch { return []; }
+}
 
-export async function GET() {
+/* football-data.org: full tournament schedule */
+async function fetchFD() {
   const key = process.env.FOOTBALL_DATA_API_KEY;
-  if (!key) return fallbackPayload();
-
+  if (!key) return null;
   try {
     const res = await fetch("https://api.football-data.org/v4/competitions/WC/matches", {
       headers: { "X-Auth-Token": key },
       next: { revalidate: 60 },
     });
-    if (!res.ok) return fallbackPayload();
+    if (!res.ok) return null;
     const data = await res.json();
-
     const matches = (data.matches || [])
       .map(m => {
         const h = matchTeam(m.homeTeam), a = matchTeam(m.awayTeam);
-        // Safety net: a team can never play itself.
         if (h && a && h === a) return null;
         return {
           id: String(m.id),
           group: m.group ? m.group.replace("GROUP_", "") : null,
           stage: m.stage,
           matchday: m.matchday ?? null,
-          h, a,                                   // null when slot not yet decided
-          hLabel: h ? null : slotLabel(m.homeTeam), // e.g. "Winner Group A" / "TBD"
+          h, a,
+          hLabel: h ? null : slotLabel(m.homeTeam),
           aLabel: a ? null : slotLabel(m.awayTeam),
           ko: m.utcDate,
           status: mapStatus(m.status),
@@ -68,10 +90,30 @@ export async function GET() {
       })
       .filter(Boolean)
       .sort((x, y) => new Date(x.ko) - new Date(y.ko));
+    return matches.length ? matches : null;
+  } catch { return null; }
+}
 
-    if (!matches.length) return fallbackPayload();
-    return NextResponse.json({ source: "live", matches });
-  } catch {
-    return fallbackPayload();
+export async function GET() {
+  const [fd, af] = await Promise.all([fetchFD(), fetchAF()]);
+  const matches = fd || FALLBACK;
+
+  // Merge: API-Football is the source of truth for live status / score / minute / lineup id
+  for (const m of matches) {
+    if (!m.h || !m.a) continue;
+    const live = af.find(f =>
+      f.h === m.h && f.a === m.a &&
+      Math.abs(new Date(f.ko) - new Date(m.ko)) < 3 * 3600 * 1000
+    );
+    if (live) {
+      m.afId = live.afId;
+      if (live.status !== "up") {
+        m.status = live.status;
+        m.minute = live.minute;
+        if (live.hs !== null) { m.hs = live.hs; m.as = live.as; }
+      }
+    }
   }
+
+  return NextResponse.json({ source: fd ? "live" : "sample", matches });
 }
