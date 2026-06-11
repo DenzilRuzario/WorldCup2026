@@ -297,8 +297,8 @@ export default function Predictions() {
   const { matches, loading } = useMatches();
   const [tab, setTab] = useState("up");
   const now = new Date();
-  const up   = matches.filter(m => statusOf(m, now) === "up").slice(0, 10);
-  const done = matches.filter(m => statusOf(m, now) === "ft" && m.hs !== null).slice(-9).reverse();
+  const up   = matches.filter(m => statusOf(m, now) === "up" && m.h && m.a).slice(0, 10);
+  const done = matches.filter(m => statusOf(m, now) === "ft" && m.h && m.a && m.hs !== null).slice(-9).reverse();
 
   return (
     <main className="wrap" style={{ padding: "30px 20px 40px" }}>
