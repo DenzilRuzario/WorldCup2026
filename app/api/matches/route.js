@@ -136,5 +136,14 @@ export async function GET() {
     }
   }
 
+  // Guaranteed live detection: between kickoff and KO+115min a match IS live,
+  // regardless of upstream API lag. Score fills in when an API provides it.
+  for (const m of matches) {
+    if (m.status === "up" && m.h && m.a) {
+      const ko = new Date(m.ko).getTime();
+      if (now >= ko && now < ko + 115 * 60000) m.status = "live";
+    }
+  }
+
   return NextResponse.json({ source: fd ? "live" : "sample", matches });
 }
