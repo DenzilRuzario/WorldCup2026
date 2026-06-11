@@ -19,6 +19,7 @@ export async function GET(req) {
         name: p.player?.name,
         number: p.player?.number,
         pos: p.player?.pos,
+        grid: p.player?.grid || null,
       })),
       subs: (t.substitutes || []).slice(0, 12).map(p => ({
         name: p.player?.name,
