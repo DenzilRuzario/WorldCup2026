@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GROUPS, T } from "@/lib/teams";
+import { GROUPS, T, GROUP_OVERVIEWS } from "@/lib/teams";
 import Flag from "@/components/Flag";
 
 export default function Teams() {
@@ -52,6 +52,9 @@ export default function Teams() {
             {shown.map(({ g, teams }) => (
               <div key={g} className="gcard">
                 <div className="gh">Group {g}</div>
+                {GROUP_OVERVIEWS[g] && (
+                  <p className="body2" style={{ fontSize: 12.5, margin: "0 0 13px", lineHeight: 1.55 }}>{GROUP_OVERVIEWS[g]}</p>
+                )}
                 {teams.map(t => (
                   <button key={t.id} className="tchip lift" onClick={() => router.push(`/teams/${t.id}`)}>
                     <Flag id={t.id} size={30} radius={4} />
