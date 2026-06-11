@@ -42,10 +42,15 @@ export default function Home() {
         </div>
       </div>
 
+      <div className="predict-strip">
+        <span>🎯 Think you know football?</span>
+        <Link href="/predictions">Make your predictions</Link>
+      </div>
+
       <div className="wrap" style={{ paddingBottom: 30 }}>
         {live.length > 0 && <>
-          <div className="sec-h"><h2>Live Scores</h2><span className="badge live">LIVE</span></div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="sec-h" style={{ justifyContent: "center", gap: 12 }}><h2>Live Scores</h2><span className="badge live">LIVE</span></div>
+          <div className="live-stage">
             {live.map(m => <MatchCard key={m.id} m={m} now={now} onTeam={setQuick} onOpen={setPanel} big />)}
           </div>
         </>}
