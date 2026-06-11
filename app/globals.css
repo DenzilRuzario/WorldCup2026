@@ -172,12 +172,22 @@ footer.site .src{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;co
 .mcard-big .score{font-size:44px}
 .mcard-big .top{font-size:13.5px}
 
-/* centered, highlighted live match card */
-.live-stage{display:flex;flex-direction:column;gap:16px;align-items:center}
-.live-stage .mcard-big{width:100%;max-width:760px;border-color:rgba(255,59,78,.45);box-shadow:0 0 0 1px rgba(255,59,78,.15),0 18px 50px rgba(0,0,0,.45),0 0 44px rgba(52,232,107,.07)}
-.mcard-big .mid{gap:20px}
-.mcard-big .score{font-size:52px}
-.mcard-big .flag img{width:72px!important;height:50px!important}
+/* centered, highlighted live match card — the main event */
+.live-stage{display:flex;flex-direction:column;gap:18px;align-items:center;margin:6px 0 10px}
+.live-stage .mcard-big{width:100%;max-width:840px;border-color:rgba(255,59,78,.5);box-shadow:0 0 0 1px rgba(255,59,78,.18),0 24px 70px rgba(0,0,0,.5),0 0 60px rgba(52,232,107,.08);background:linear-gradient(180deg,#16224A,#0E1736)}
+.mcard-big{padding:32px 28px}
+.mcard-big .mid{gap:26px}
+.mcard-big .score{font-size:64px}
+.mcard-big .flag img{width:88px!important;height:62px!important}
+.mcard-big .tn{font-size:18px}
+.mcard-big .top{font-size:14px}
+.mcard-big .foot{font-size:12.5px;padding:10px}
+@media(max-width:640px){
+  .mcard-big{padding:20px 16px}
+  .mcard-big .score{font-size:44px}
+  .mcard-big .flag img{width:60px!important;height:42px!important}
+  .mcard-big .tn{font-size:13px}
+}
 
 /* slim predictions CTA strip */
 .predict-strip{display:flex;align-items:center;justify-content:center;gap:12px;background:linear-gradient(90deg,rgba(52,232,107,.10),rgba(52,232,107,.04));border-top:1px solid rgba(52,232,107,.25);border-bottom:1px solid rgba(52,232,107,.25);padding:9px 16px;font-family:var(--disp);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt2)}
