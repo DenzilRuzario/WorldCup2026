@@ -54,6 +54,7 @@ export async function GET() {
           id: String(m.id),
           group: m.group ? m.group.replace("GROUP_", "") : null,
           stage: m.stage,
+          matchday: m.matchday ?? null,
           h, a,                                   // null when slot not yet decided
           hLabel: h ? null : slotLabel(m.homeTeam), // e.g. "Winner Group A" / "TBD"
           aLabel: a ? null : slotLabel(m.awayTeam),
