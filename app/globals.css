@@ -155,3 +155,19 @@ footer.site .src{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;co
 /* group overview button */
 .ov-btn{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--green);background:rgba(52,232,107,.08);border:1px solid rgba(52,232,107,.35);border-radius:99px;padding:5px 13px;cursor:pointer;transition:background .15s}
 .ov-btn:hover{background:rgba(52,232,107,.18)}
+
+/* hero text fades after 5s — stadium background stays */
+.hero-inner{overflow:hidden;max-height:340px;opacity:1;transition:max-height .9s ease,opacity .7s ease,margin .9s ease}
+.hero.shrunk{padding:26px 20px 22px}
+.hero.shrunk .hero-inner{max-height:0;opacity:0;margin:0}
+.hero{transition:padding .9s ease}
+.hero .strip{display:none;font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--txt)}
+.hero.shrunk .strip{display:block}
+.hero .strip .g{color:var(--green)}
+
+/* full-width live match card */
+.mcard-big{padding:24px}
+.mcard-big .flag img{width:64px!important;height:45px!important}
+.mcard-big .tn{font-size:16px}
+.mcard-big .score{font-size:44px}
+.mcard-big .top{font-size:13.5px}
