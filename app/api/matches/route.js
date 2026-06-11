@@ -95,8 +95,18 @@ async function fetchFD() {
 }
 
 export async function GET() {
-  const [fd, af] = await Promise.all([fetchFD(), fetchAF()]);
+  const fd = await fetchFD();
   const matches = fd || FALLBACK;
+
+  // Quota guard: API-Football free tier = 100 req/day. Only call it when a
+  // match window is active (75 min before kickoff → 2.5 h after), so quiet
+  // hours cost zero requests.
+  const now = Date.now();
+  const windowActive = matches.some(m => {
+    const ko = new Date(m.ko).getTime();
+    return now >= ko - 75 * 60000 && now <= ko + 150 * 60000;
+  });
+  const af = windowActive ? await fetchAF() : [];
 
   // Merge: API-Football is the source of truth for live status / score / minute / lineup id
   for (const m of matches) {
