@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { T } from "@/lib/teams";
 import { FALLBACK } from "@/lib/fallback";
 import { afTeamId, afStatus } from "@/lib/afmap";
+import { afAllowed } from "@/lib/afQuota";
 
 const TLA = Object.fromEntries(T.map(t => [t.id.toUpperCase(), t.id]));
 const NAME = Object.fromEntries(T.map(t => [t.name.toLowerCase(), t.id]));
@@ -28,14 +29,14 @@ const slotLabel = apiTeam => {
 };
 
 /* API-Football: today's fixtures (live status, scores, minute, fixture ids) */
-async function fetchAF() {
+async function fetchAF(date) {
   const key = process.env.API_FOOTBALL_KEY;
   if (!key) return [];
+  if (!(await afAllowed())) return [];
   try {
-    const today = new Date().toISOString().slice(0, 10);
     const res = await fetch(
-      `https://v3.football.api-sports.io/fixtures?date=${today}`,
-      { headers: { "x-apisports-key": key }, next: { revalidate: 240 } }
+      `https://v3.football.api-sports.io/fixtures?date=${date}`,
+      { headers: { "x-apisports-key": key }, next: { revalidate: 600 } }
     );
     if (!res.ok) return [];
     const data = await res.json();
@@ -98,15 +99,20 @@ export async function GET() {
   const fd = await fetchFD();
   const matches = fd || FALLBACK;
 
-  // Quota guard: API-Football free tier = 100 req/day. Only call it when a
-  // match window is active (75 min before kickoff → 2.5 h after), so quiet
-  // hours cost zero requests.
+  // Quota guard: API-Football free tier = 100 req/day.
+  // Only call during match windows (75 min pre-KO → 2.5 h post-KO); on
+  // multi-match days the windows union naturally. Matches near UTC midnight
+  // get their own date fetched. Calls are also budget-capped via Supabase.
   const now = Date.now();
-  const windowActive = matches.some(m => {
-    const ko = new Date(m.ko).getTime();
-    return now >= ko - 75 * 60000 && now <= ko + 150 * 60000;
-  });
-  const af = windowActive ? await fetchAF() : [];
+  const activeDates = [...new Set(
+    matches
+      .filter(m => {
+        const ko = new Date(m.ko).getTime();
+        return now >= ko - 75 * 60000 && now <= ko + 150 * 60000;
+      })
+      .map(m => new Date(m.ko).toISOString().slice(0, 10))
+  )].slice(0, 2);
+  const af = (await Promise.all(activeDates.map(d => fetchAF(d)))).flat();
 
   // Merge: API-Football is the source of truth for live status / score / minute / lineup id
   for (const m of matches) {
