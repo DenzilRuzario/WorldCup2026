@@ -13,11 +13,21 @@ const mapStatus = s =>
 const matchTeam = apiTeam => {
   if (!apiTeam) return null;
   if (apiTeam.tla && TLA[apiTeam.tla]) return TLA[apiTeam.tla];
-  const n = (apiTeam.name || "").toLowerCase();
+  const n = (apiTeam.name || "").toLowerCase().trim();
+  // Empty or placeholder names ("TBD", "1A", "Winner Match 74") must NOT fuzzy-match.
+  if (n.length < 4) return null;
   if (NAME[n]) return NAME[n];
-  // loose contains-match for naming variants ("Korea Republic" etc.)
-  for (const t of T) if (n.includes(t.name.toLowerCase()) || t.name.toLowerCase().includes(n)) return t.id;
+  for (const t of T) {
+    const tn = t.name.toLowerCase();
+    if (n.includes(tn) || tn.includes(n)) return t.id;
+  }
   return null;
+};
+
+// Human-readable label for an unresolved knockout slot.
+const slotLabel = apiTeam => {
+  const n = (apiTeam?.name || "").trim();
+  return n && n.toLowerCase() !== "null" ? n : "TBD";
 };
 
 const fallbackPayload = () =>
@@ -30,7 +40,6 @@ export async function GET() {
   try {
     const res = await fetch("https://api.football-data.org/v4/competitions/WC/matches", {
       headers: { "X-Auth-Token": key },
-      // one upstream call per minute max — well inside the free 10/min limit
       next: { revalidate: 60 },
     });
     if (!res.ok) return fallbackPayload();
@@ -39,12 +48,15 @@ export async function GET() {
     const matches = (data.matches || [])
       .map(m => {
         const h = matchTeam(m.homeTeam), a = matchTeam(m.awayTeam);
-        if (!h || !a) return null; // skip TBD knockout slots
+        // Safety net: a team can never play itself.
+        if (h && a && h === a) return null;
         return {
           id: String(m.id),
           group: m.group ? m.group.replace("GROUP_", "") : null,
           stage: m.stage,
-          h, a,
+          h, a,                                   // null when slot not yet decided
+          hLabel: h ? null : slotLabel(m.homeTeam), // e.g. "Winner Group A" / "TBD"
+          aLabel: a ? null : slotLabel(m.awayTeam),
           ko: m.utcDate,
           status: mapStatus(m.status),
           minute: m.minute ?? null,
