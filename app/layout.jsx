@@ -1,5 +1,6 @@
 import "./globals.css";
 import NavLinks from "@/components/NavLinks";
+import PageTracker from "@/components/PageTracker";
 import Trophy from "@/components/Trophy";
 
 export const metadata = {
@@ -11,6 +12,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
+        <PageTracker />
         <header className="nav">
           <a href="/" className="logo">
             <Trophy size={30} />
