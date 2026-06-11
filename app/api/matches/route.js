@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { T } from "@/lib/teams";
 import { FALLBACK } from "@/lib/fallback";
 import { afTeamId, afStatus } from "@/lib/afmap";
@@ -29,14 +30,16 @@ const slotLabel = apiTeam => {
 };
 
 /* API-Football: today's fixtures (live status, scores, minute, fixture ids) */
-async function fetchAF(date) {
+async function fetchAFraw(date) {
   const key = process.env.API_FOOTBALL_KEY;
   if (!key) return [];
+  // tick happens here — inside the cached function — so it only counts
+  // real upstream calls, not every visitor poll
   if (!(await afAllowed())) return [];
   try {
     const res = await fetch(
       `https://v3.football.api-sports.io/fixtures?date=${date}`,
-      { headers: { "x-apisports-key": key }, next: { revalidate: 600 } }
+      { headers: { "x-apisports-key": key }, cache: "no-store" }
     );
     if (!res.ok) return [];
     const data = await res.json();
@@ -57,6 +60,8 @@ async function fetchAF(date) {
       .filter(Boolean);
   } catch { return []; }
 }
+const fetchAF = (date) =>
+  unstable_cache(() => fetchAFraw(date), ["af-fixtures", date], { revalidate: 600 })();
 
 /* football-data.org: full tournament schedule */
 async function fetchFD() {
