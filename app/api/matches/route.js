@@ -4,6 +4,7 @@ import { T } from "@/lib/teams";
 import { FALLBACK } from "@/lib/fallback";
 import { afTeamId, afStatus } from "@/lib/afmap";
 import { afAllowed } from "@/lib/afQuota";
+import { sbGet, sbUpsert } from "@/lib/sbRest";
 
 const TLA = Object.fromEntries(T.map(t => [t.id.toUpperCase(), t.id]));
 const NAME = Object.fromEntries(T.map(t => [t.name.toLowerCase(), t.id]));
@@ -35,7 +36,7 @@ async function fetchAFraw(date) {
   if (!key) return [];
   // tick happens here — inside the cached function — so it only counts
   // real upstream calls, not every visitor poll
-  if (!(await afAllowed())) return [];
+  if (!(await afAllowed("fixtures"))) return [];
   try {
     const res = await fetch(
       `https://v3.football.api-sports.io/fixtures?date=${date}`,
@@ -43,6 +44,7 @@ async function fetchAFraw(date) {
     );
     if (!res.ok) return [];
     const data = await res.json();
+    const fetchedAt = Date.now();
     return (data.response || [])
       .map(f => {
         const h = afTeamId(f.teams?.home?.name), a = afTeamId(f.teams?.away?.name);
@@ -55,6 +57,7 @@ async function fetchAFraw(date) {
           minute: f.fixture?.status?.elapsed ?? null,
           hs: f.goals?.home ?? null,
           as: f.goals?.away ?? null,
+          fetchedAt,
         };
       })
       .filter(Boolean);
@@ -131,6 +134,7 @@ export async function GET() {
       if (live.status !== "up") {
         m.status = live.status;
         m.minute = live.minute;
+        m.updatedAt = live.fetchedAt;
         if (live.hs !== null) { m.hs = live.hs; m.as = live.as; }
       }
     }
@@ -143,6 +147,38 @@ export async function GET() {
       const ko = new Date(m.ko).getTime();
       if (now >= ko && now < ko + 115 * 60000) m.status = "live";
     }
+  }
+
+  // Persistence layer: finished scores live in Supabase forever, so the site
+  // keeps full history even if every provider dies. Manual overrides win last.
+  const [stored, overrides] = await Promise.all([
+    sbGet("results?select=match_id,home,away"),
+    sbGet("overrides?select=*"),
+  ]);
+
+  if (stored) {
+    for (const m of matches) {
+      const r = stored.find(x => x.match_id === m.id);
+      if (r && (m.hs === null || m.status !== "ft")) {
+        m.hs = r.home; m.as = r.away; m.status = "ft";
+      }
+    }
+    const newFt = matches.filter(m =>
+      m.status === "ft" && m.hs !== null && m.h && m.a &&
+      !stored.some(x => x.match_id === m.id)
+    );
+    if (newFt.length) {
+      await sbUpsert("results", newFt.map(m => ({ match_id: m.id, home: m.hs, away: m.as })));
+    }
+  }
+
+  for (const o of overrides || []) {
+    const m = matches.find(x => x.id === o.match_id);
+    if (!m) continue;
+    if (o.home !== null && o.home !== undefined) { m.hs = o.home; m.as = o.away; }
+    if (o.minute !== null && o.minute !== undefined) m.minute = o.minute;
+    if (o.status) m.status = o.status;
+    m.overridden = true;
   }
 
   return NextResponse.json({ source: fd ? "live" : "sample", matches });
