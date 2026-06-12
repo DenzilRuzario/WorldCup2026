@@ -50,6 +50,28 @@ export async function GET() {
     } catch (e) { out.af.error = String(e).slice(0, 200); }
   }
 
+  // match_facts table + live/finished match IDs (to diagnose facts not showing)
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const r = await fetch(`${url}/rest/v1/match_facts?select=match_id,data`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store",
+    });
+    out.matchFacts = { http: r.status, rows: r.ok ? await r.json() : await r.text() };
+  } catch (e) { out.matchFacts = String(e).slice(0, 150); }
+
+  // current match IDs from our own merged feed
+  try {
+    const base = process.env.NEXT_PUBLIC_SITE_URL || "";
+    const r = await fetch(`${base}/api/matches`, { cache: "no-store" });
+    if (r.ok) {
+      const d = await r.json();
+      out.matchIds = (d.matches || [])
+        .filter(m => m.h && m.a)
+        .slice(0, 40)
+        .map(m => ({ id: m.id, t: `${m.h}-${m.a}`, status: m.status, score: `${m.hs ?? "-"}:${m.as ?? "-"}` }));
+    }
+  } catch (e) { out.matchIds = String(e).slice(0, 150); }
+
   // quota counter
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
