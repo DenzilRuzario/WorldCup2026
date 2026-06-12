@@ -149,6 +149,23 @@ export async function GET() {
     }
   }
 
+  // Backfill: any FINISHED match still missing a score gets one AF lookup for
+  // its date (cached + budget-gated), so matches that ended during an outage
+  // still get their final score — then it's persisted below and never re-fetched.
+  const needsScore = matches.filter(m =>
+    m.h && m.a && m.hs === null &&
+    new Date(m.ko).getTime() + 115 * 60000 < now
+  );
+  if (needsScore.length) {
+    const dates = [...new Set(needsScore.map(m => new Date(m.ko).toISOString().slice(0, 10)))].slice(0, 2);
+    const back = (await Promise.all(dates.map(d => fetchAF(d)))).flat();
+    for (const m of needsScore) {
+      const f = back.find(x => x.h === m.h && x.a === m.a &&
+        Math.abs(new Date(x.ko) - new Date(m.ko)) < 3 * 3600 * 1000);
+      if (f && f.hs !== null) { m.hs = f.hs; m.as = f.as; m.status = "ft"; }
+    }
+  }
+
   // Persistence layer: finished scores live in Supabase forever, so the site
   // keeps full history even if every provider dies. Manual overrides win last.
   const [stored, overrides] = await Promise.all([
