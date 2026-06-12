@@ -16,6 +16,91 @@ function Stat({ label, value, accent }) {
   );
 }
 
+const todayUTC = () => new Date().toISOString().slice(0, 10);
+
+function ApiUsage({ rows }) {
+  const today = (rows || []).filter(r => r.day === todayUTC());
+  const total = today.reduce((a, r) => a + r.count, 0);
+  const CAP = 88, HARD = 100;
+  return (
+    <>
+      <div className="sec-h"><h2>API budget (API-Football)</h2></div>
+      <div className="card">
+        <div className="grid auto-220" style={{ marginBottom: 4 }}>
+          {["fixtures", "lineups", "events"].map(ep => {
+            const r = today.find(x => x.endpoint === ep);
+            return <Stat key={ep} label={`${ep} calls today`} value={r?.count || 0} />;
+          })}
+          <Stat label={`Total / cap ${CAP}`} value={`${total}`} accent={total > CAP ? "var(--live)" : "var(--green)"} />
+        </div>
+        <div style={{ height: 10, borderRadius: 99, background: "var(--navy1)", border: "1px solid var(--line)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${Math.min(100, (total / HARD) * 100)}%`, background: total > CAP ? "#FF3B4E" : "linear-gradient(90deg,#1FB551,var(--green))" }} />
+        </div>
+        <div className="mono-dim" style={{ fontSize: 9.5, marginTop: 6 }}>
+          {Math.max(0, HARD - total)} OF {HARD} PROVIDER REQUESTS REMAINING · SITE STOPS CALLING AT {CAP} · RESETS 00:00 UTC (5:30 AM IST)
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Override({ matches, matchName }) {
+  const [mid, setMid] = useState("");
+  const [form, setForm] = useState({ home: "", away: "", minute: "", status: "" });
+  const [msg, setMsg] = useState(null);
+  const candidates = matches.filter(m => m.h && m.a);
+
+  const save = async () => {
+    const sb = getSupabase(); if (!sb || !mid) return;
+    const row = {
+      match_id: mid,
+      home: form.home === "" ? null : +form.home,
+      away: form.away === "" ? null : +form.away,
+      minute: form.minute === "" ? null : +form.minute,
+      status: form.status || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await sb.from("overrides").upsert(row);
+    setMsg(error ? `⚠ ${error.message}` : "✓ Override live — site reflects it within a minute.");
+  };
+  const clear = async () => {
+    const sb = getSupabase(); if (!sb || !mid) return;
+    const { error } = await sb.from("overrides").delete().eq("match_id", mid);
+    setMsg(error ? `⚠ ${error.message}` : "✓ Override removed — back to API data.");
+  };
+
+  return (
+    <>
+      <div className="sec-h"><h2>Manual score override</h2></div>
+      <div className="card">
+        <p className="body2" style={{ fontSize: 12.5, marginBottom: 12 }}>
+          Emergency control: if every provider fails mid-match, set the score here and the whole site serves it. Clear it to hand control back to the APIs.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, maxWidth: 560 }}>
+          <select className="inp" value={mid} onChange={e => setMid(e.target.value)}>
+            <option value="">Pick a match…</option>
+            {candidates.map(m => <option key={m.id} value={m.id}>{matchName(m.id)}</option>)}
+          </select>
+          <div style={{ display: "grid", gridTemplateColumns: "70px 70px 80px 1fr auto auto", gap: 8 }}>
+            <input className="inp" placeholder="Home" inputMode="numeric" value={form.home} onChange={e => setForm({ ...form, home: e.target.value.replace(/\D/g, "") })} />
+            <input className="inp" placeholder="Away" inputMode="numeric" value={form.away} onChange={e => setForm({ ...form, away: e.target.value.replace(/\D/g, "") })} />
+            <input className="inp" placeholder="Min'" inputMode="numeric" value={form.minute} onChange={e => setForm({ ...form, minute: e.target.value.replace(/\D/g, "") })} />
+            <select className="inp" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+              <option value="">status (keep)</option>
+              <option value="live">LIVE</option>
+              <option value="ft">FULL TIME</option>
+              <option value="up">UPCOMING</option>
+            </select>
+            <button className="btn-g sm" onClick={save} disabled={!mid}>Save</button>
+            <button className="chip-btn" onClick={clear} disabled={!mid}>Clear</button>
+          </div>
+          {msg && <div className="mono-dim" style={{ fontSize: 11, color: msg.startsWith("✓") ? "var(--green)" : "#FF3B4E" }}>{msg}</div>}
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
@@ -27,13 +112,14 @@ export default function Dashboard() {
     try {
       const since14 = new Date(Date.now() - 14 * DAY).toISOString();
       const since5m = new Date(Date.now() - 5 * 60000).toISOString();
-      const [pv14, pvAll, live, votes, preds, ballots] = await Promise.all([
+      const [pv14, pvAll, live, votes, preds, ballots, usage] = await Promise.all([
         sb.from("page_views").select("created_at,session").gte("created_at", since14),
         sb.from("page_views").select("*", { count: "exact", head: true }),
         sb.from("page_views").select("session").gte("created_at", since5m),
         sb.from("votes").select("match_id,pick,name"),
         sb.from("score_predictions").select("match_id,name,home,away,created_at"),
         sb.from("ballots").select("name,picks,created_at"),
+        sb.from("af_usage").select("*"),
       ]);
       const firstErr = [pv14, live, votes, preds, ballots].find(r => r.error);
       if (firstErr?.error) { setErr(firstErr.error.message); return; }
@@ -60,6 +146,7 @@ export default function Dashboard() {
         votes: votes.data || [],
         preds: preds.data || [],
         ballots: ballots.data || [],
+        usage: usage.data || [],
         at: new Date(),
       });
       setErr(null);
@@ -115,6 +202,9 @@ export default function Dashboard() {
         <Stat label="Score predictions" value={data.preds.length} />
         <Stat label="Ballots locked" value={data.ballots.length} accent="var(--gold)" />
       </div>
+
+      <ApiUsage rows={data.usage} />
+      <Override matches={matches} matchName={matchName} />
 
       <div className="sec-h"><h2>Votes by match</h2></div>
       <div className="card">
