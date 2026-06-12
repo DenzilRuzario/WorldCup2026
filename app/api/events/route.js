@@ -7,7 +7,7 @@ export async function GET(req) {
   const key = process.env.API_FOOTBALL_KEY;
   if (!fid || !key) return NextResponse.json({ subs: [] });
   const subs = await unstable_cache(async () => {
-    if (!(await afAllowed())) return [];
+    if (!(await afAllowed("events"))) return [];
     const res = await fetch(
       `https://v3.football.api-sports.io/fixtures/events?fixture=${fid}`,
       { headers: { "x-apisports-key": key }, cache: "no-store" }
