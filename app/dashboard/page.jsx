@@ -101,6 +101,92 @@ function Override({ matches, matchName }) {
   );
 }
 
+function MatchFacts({ matches, matchName }) {
+  const [mid, setMid] = useState("");
+  const [goals, setGoals] = useState("");
+  const [cards, setCards] = useState("");
+  const [msg, setMsg] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const candidates = matches.filter(m => m.h && m.a);
+
+  // load existing facts when a match is picked
+  const pick = async id => {
+    setMid(id); setMsg(null); setLoaded(false);
+    setGoals(""); setCards("");
+    const sb = getSupabase(); if (!sb || !id) return;
+    const { data } = await sb.from("match_facts").select("data").eq("match_id", id).maybeSingle();
+    if (data?.data) {
+      const g = (data.data.goals || []).map(x => `${x.side === "a" ? "A" : "H"} ${x.scorer} ${x.minute}${x.penalty ? " P" : ""}${x.own ? " OG" : ""}`).join("\n");
+      const c = (data.data.cards || []).map(x => `${x.side === "a" ? "A" : "H"} ${x.player} ${x.minute}${x.red ? " R" : " Y"}`).join("\n");
+      setGoals(g); setCards(c);
+    }
+    setLoaded(true);
+  };
+
+  // parse "H Scorer 67 [P|OG]" lines
+  const parseGoals = txt => txt.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+    const parts = l.split(/\s+/);
+    const side = /^a$/i.test(parts[0]) ? "a" : "h";
+    const rest = /^[ha]$/i.test(parts[0]) ? parts.slice(1) : parts;
+    const flags = rest.filter(t => /^(P|OG)$/i.test(t));
+    const core = rest.filter(t => !/^(P|OG)$/i.test(t));
+    const minTok = core[core.length - 1];
+    const mm = (minTok || "").match(/(\d+)(?:\+(\d+))?/);
+    const scorer = core.slice(0, -1).join(" ");
+    return { side, scorer, minute: mm ? +mm[1] : null, extra: mm && mm[2] ? +mm[2] : null,
+      penalty: flags.some(f => /^P$/i.test(f)), own: flags.some(f => /^OG$/i.test(f)) };
+  }).filter(g => g.scorer);
+
+  const parseCards = txt => txt.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+    const parts = l.split(/\s+/);
+    const side = /^a$/i.test(parts[0]) ? "a" : "h";
+    const rest = /^[ha]$/i.test(parts[0]) ? parts.slice(1) : parts;
+    const red = rest.some(t => /^R$/i.test(t));
+    const core = rest.filter(t => !/^[RY]$/i.test(t));
+    const minTok = core[core.length - 1];
+    const mm = (minTok || "").match(/(\d+)(?:\+(\d+))?/);
+    const player = core.slice(0, -1).join(" ");
+    return { side, player, minute: mm ? +mm[1] : null, extra: mm && mm[2] ? +mm[2] : null, red };
+  }).filter(c => c.player);
+
+  const save = async () => {
+    const sb = getSupabase(); if (!sb || !mid) return;
+    const payload = { goals: parseGoals(goals), cards: parseCards(cards) };
+    const { error } = await sb.from("match_facts").upsert({ match_id: mid, data: payload });
+    setMsg(error ? `\u26a0 ${error.message}` : `\u2713 Saved ${payload.goals.length} goals, ${payload.cards.length} cards \u2014 live on the site within a minute.`);
+  };
+
+  return (
+    <>
+      <div className="sec-h"><h2>Match facts — goals & cards</h2></div>
+      <div className="card">
+        <p className="body2" style={{ fontSize: 12.5, marginBottom: 10 }}>
+          Manually enter goalscorers and cards (zero API cost, permanent). One per line.
+          Start each line with <strong>H</strong> (home) or <strong>A</strong> (away).
+          Goals: <code>H Quiñones 9</code> · add <code>P</code> for penalty, <code>OG</code> for own goal.
+          Cards: <code>A Sithole 50 R</code> (<code>R</code> = red, <code>Y</code> = yellow).
+        </p>
+        <select className="inp" value={mid} onChange={e => pick(e.target.value)} style={{ marginBottom: 10 }}>
+          <option value="">Pick a match…</option>
+          {candidates.map(m => <option key={m.id} value={m.id}>{matchName(m.id)}</option>)}
+        </select>
+        {mid && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div>
+            <div className="mono-dim" style={{ fontSize: 9.5, marginBottom: 4 }}>GOALS</div>
+            <textarea className="inp left" rows={5} placeholder={"H Quiñones 9\nH Jiménez 67"} value={goals} onChange={e => setGoals(e.target.value)} style={{ fontFamily: "var(--mono)", resize: "vertical" }} />
+          </div>
+          <div>
+            <div className="mono-dim" style={{ fontSize: 9.5, marginBottom: 4 }}>CARDS</div>
+            <textarea className="inp left" rows={5} placeholder={"H Montes 90+2 R\nA Sithole 50 R"} value={cards} onChange={e => setCards(e.target.value)} style={{ fontFamily: "var(--mono)", resize: "vertical" }} />
+          </div>
+        </div>}
+        {mid && <button className="btn-g sm" onClick={save} style={{ marginTop: 10 }}>Save match facts</button>}
+        {msg && <div className="mono-dim" style={{ fontSize: 11, marginTop: 8, color: msg.startsWith("\u2713") ? "var(--green)" : "#FF3B4E" }}>{msg}</div>}
+      </div>
+    </>
+  );
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
@@ -205,6 +291,7 @@ export default function Dashboard() {
 
       <ApiUsage rows={data.usage} />
       <Override matches={matches} matchName={matchName} />
+      <MatchFacts matches={matches} matchName={matchName} />
 
       <div className="sec-h"><h2>Votes by match</h2></div>
       <div className="card">
