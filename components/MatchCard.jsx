@@ -52,7 +52,7 @@ export default function MatchCard({ m, now, onTeam, onOpen, big }) {
         <Side id={m.a} label={m.aLabel} onTeam={onTeam} />
       </div>
       <div className={`foot${s === "live" ? " live" : ""}`}>
-        {s === "live" ? "▸ Live — tap for lineups" : s === "up" ? (panelReady ? `Kickoff in ${countdown(m.ko, now)} — tap for lineups` : `Kickoff in ${countdown(m.ko, now)}`) : (m.venue ? m.venue.split(",")[0] : "Full time")}
+        {s === "live" ? `▸ Live — tap for lineups${m.updatedAt ? ` · score ${Math.max(1, Math.round((now - m.updatedAt) / 60000))}m old` : ""}${m.overridden ? " · manual" : ""}` : s === "up" ? (panelReady ? `Kickoff in ${countdown(m.ko, now)} — tap for lineups` : `Kickoff in ${countdown(m.ko, now)}`) : (m.venue ? m.venue.split(",")[0] : "Full time")}
       </div>
     </div>
   );
