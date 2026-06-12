@@ -87,7 +87,7 @@ function ResultCard({ m }) {
           <Flag id={m.h} size={24} radius={3} />{H.name}
         </span>
         <span style={{ fontFamily: "var(--mono)", color: "var(--gold)", fontSize: 18, fontWeight: 900 }}>
-          {m.hs} – {m.as}
+          {m.hs !== null && m.hs !== undefined ? `${m.hs} – ${m.as}` : "FT"}
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {A.name}<Flag id={m.a} size={24} radius={3} />
@@ -112,7 +112,7 @@ export default function Home() {
 
   const live    = matches.filter(m => statusOf(m, now) === "live" && m.h && m.a);
   const upcoming = matches.filter(m => statusOf(m, now) === "up" && m.h && m.a).slice(0, 3);
-  const results  = matches.filter(m => statusOf(m, now) === "ft" && m.h && m.a && m.hs !== null)
+  const results  = matches.filter(m => statusOf(m, now) === "ft" && m.h && m.a)
                           .slice(-6).reverse();
 
   return (
