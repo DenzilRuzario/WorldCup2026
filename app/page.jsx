@@ -11,64 +11,76 @@ import Trophy from "@/components/Trophy";
 
 const SPOTLIGHT = ["bra", "ger", "arg", "fra"];
 
-/* fetch goalscorers for a finished match */
-function useGoals(m) {
-  const [goals, setGoals] = useState(null);
+/* match facts: prefer manually-entered goals/cards, else API events */
+function useFacts(m) {
+  const [data, setData] = useState(() => m.facts ? { goals: m.facts.goals || [], cards: m.facts.cards || [] } : null);
   useEffect(() => {
+    if (m.facts) { setData({ goals: m.facts.goals || [], cards: m.facts.cards || [] }); return; }
     if (!m.afId) return;
     fetch(`/api/events?fid=${m.afId}`)
       .then(r => r.json())
-      .then(d => setGoals(d.goals || []))
-      .catch(() => setGoals([]));
-  }, [m.afId]);
-  return goals;
+      .then(d => setData({ goals: d.goals || [], cards: d.cards || [] }))
+      .catch(() => setData({ goals: [], cards: [] }));
+  }, [m.afId, m.facts]);
+  return data;
 }
 
-/* goalscorer two-column layout */
-function Scorers({ m, goals }) {
-  if (!goals || goals.length === 0) return null;
+/* goals + cards two-column infographic */
+function Facts({ m, facts }) {
+  if (!facts) return null;
+  const { goals = [], cards = [] } = facts;
+  if (goals.length === 0 && cards.length === 0) return null;
   const H = TEAM[m.h], A = TEAM[m.a];
-
-  // group goals by team, matching on partial team name
   const norm = s => (s || "").toLowerCase();
-  const isHome = g => norm(g.team).includes(norm(H.name).slice(0, 5)) ||
-    norm(H.name).includes(norm(g.team).slice(0, 5));
-  const hGoals = goals.filter(g => isHome(g));
-  const aGoals = goals.filter(g => !isHome(g));
-  const maxRows = Math.max(hGoals.length, aGoals.length);
+  const isHome = e => {
+    if (e.side) return e.side === "h";
+    return norm(e.team).includes(norm(H.name).slice(0, 5)) || norm(H.name).includes(norm(e.team).slice(0, 5));
+  };
+  const min = e => `${e.minute}${e.extra ? `+${e.extra}` : ""}'`;
+  const surname = n => (n || "").split(" ").slice(-1)[0];
+
+  const hGoals = goals.filter(isHome), aGoals = goals.filter(e => !isHome(e));
+  const hCards = cards.filter(isHome), aCards = cards.filter(e => !isHome(e));
 
   const GoalLine = ({ g, right }) => (
-    <div style={{
-      fontSize: 11.5, color: "var(--txt2)", lineHeight: 1.4,
-      textAlign: right ? "right" : "left",
-      fontFamily: "var(--mono)",
-    }}>
-      <span style={{ color: "var(--txt)" }}>
-        {g.own ? "OG " : g.penalty ? "✦ " : ""}{g.scorer.split(" ").slice(-1)[0]}
-      </span>
-      {" "}<span style={{ color: "var(--txt3)" }}>{g.minute}{g.extra ? `+${g.extra}` : ""}'</span>
+    <div style={{ fontSize: 11.5, lineHeight: 1.5, textAlign: right ? "right" : "left", fontFamily: "var(--mono)" }}>
+      <span style={{ color: "var(--txt)" }}>{g.own ? "OG " : ""}{surname(g.scorer)}</span>{" "}
+      <span style={{ color: "var(--txt3)" }}>{min(g)}{g.penalty ? " (P)" : ""}</span>
+    </div>
+  );
+  const CardLine = ({ c, right }) => (
+    <div style={{ fontSize: 11, lineHeight: 1.5, textAlign: right ? "right" : "left", fontFamily: "var(--mono)", display: "flex", gap: 5, justifyContent: right ? "flex-end" : "flex-start", alignItems: "center" }}>
+      {right && <><span style={{ color: "var(--txt2)" }}>{surname(c.player)} <span style={{ color: "var(--txt3)" }}>{min(c)}</span></span><Card red={c.red} /></>}
+      {!right && <><Card red={c.red} /><span style={{ color: "var(--txt2)" }}>{surname(c.player)} <span style={{ color: "var(--txt3)" }}>{min(c)}</span></span></>}
     </div>
   );
 
   return (
-    <div style={{
-      display: "grid", gridTemplateColumns: "1fr 1fr",
-      gap: "2px 16px", marginTop: 10,
-      borderTop: "1px solid var(--line-soft)", paddingTop: 8,
-    }}>
-      {Array.from({ length: maxRows }).map((_, i) => (
-        <>
-          <div key={`h${i}`}>{hGoals[i] && <GoalLine g={hGoals[i]} />}</div>
-          <div key={`a${i}`} style={{ textAlign: "right" }}>{aGoals[i] && <GoalLine g={aGoals[i]} right />}</div>
-        </>
-      ))}
+    <div style={{ marginTop: 10, borderTop: "1px solid var(--line-soft)", paddingTop: 8 }}>
+      {(hGoals.length > 0 || aGoals.length > 0) && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: "1px 10px", alignItems: "start" }}>
+          <div>{hGoals.map((g, i) => <GoalLine key={i} g={g} />)}</div>
+          <div style={{ alignSelf: "center", fontSize: 13 }}>⚽</div>
+          <div>{aGoals.map((g, i) => <GoalLine key={i} g={g} right />)}</div>
+        </div>
+      )}
+      {(hCards.length > 0 || aCards.length > 0) && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: "1px 10px", alignItems: "start", marginTop: 6 }}>
+          <div>{hCards.map((c, i) => <CardLine key={i} c={c} />)}</div>
+          <div style={{ alignSelf: "center" }}><Card red /></div>
+          <div>{aCards.map((c, i) => <CardLine key={i} c={c} right />)}</div>
+        </div>
+      )}
     </div>
   );
+}
+function Card({ red }) {
+  return <span style={{ display: "inline-block", width: 9, height: 12, borderRadius: 1.5, background: red ? "#FF3B4E" : "#F5C518", flex: "0 0 auto" }} />;
 }
 
 /* result card with goalscorers */
 function ResultCard({ m }) {
-  const goals = useGoals(m);
+  const facts = useFacts(m);
   const H = TEAM[m.h], A = TEAM[m.a];
   return (
     <div className="card" style={{ padding: "12px 14px" }}>
@@ -93,9 +105,9 @@ function ResultCard({ m }) {
           {A.name}<Flag id={m.a} size={24} radius={3} />
         </span>
       </div>
-      <Scorers m={m} goals={goals} />
-      {goals === null && m.afId && (
-        <div className="mono-dim" style={{ fontSize: 9.5, marginTop: 6 }}>Loading scorers…</div>
+      <Facts m={m} facts={facts} />
+      {facts === null && m.afId && (
+        <div className="mono-dim" style={{ fontSize: 9.5, marginTop: 6 }}>Loading match facts…</div>
       )}
     </div>
   );
