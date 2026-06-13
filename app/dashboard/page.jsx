@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { TEAM } from "@/lib/teams";
+import { TEAM, playersOf } from "@/lib/teams";
 import { getSupabase } from "@/lib/supabase";
 import { useMatches } from "@/components/useMatches";
 
@@ -101,106 +101,113 @@ function Override({ matches, matchName }) {
   );
 }
 
+function PlayerPick({ team, value, onChange }) {
+  const known = team ? playersOf(team) : [];
+  const isOther = value && !known.includes(value);
+  return (
+    <div style={{ display: "flex", gap: 6, flex: 1 }}>
+      <select className="inp" style={{ flex: 1 }} value={isOther ? "__other" : value}
+        onChange={e => onChange(e.target.value === "__other" ? " " : e.target.value)}>
+        <option value="">Player…</option>
+        {known.map(p => <option key={p} value={p}>{p}</option>)}
+        <option value="__other">✎ Type a name…</option>
+      </select>
+      {isOther && <input className="inp left" style={{ flex: 1 }} placeholder="Player name" value={value.trim()} onChange={e => onChange(e.target.value)} autoFocus />}
+    </div>
+  );
+}
+
 function MatchFacts({ matches, matchName }) {
   const [mid, setMid] = useState("");
-  const [goals, setGoals] = useState("");
-  const [cards, setCards] = useState("");
+  const [goals, setGoals] = useState([]); // {side, player, minute, penalty, own}
+  const [cards, setCards] = useState([]); // {side, player, minute, red}
   const [msg, setMsg] = useState(null);
   const candidates = matches.filter(m => m.h && m.a);
+  const m = candidates.find(x => x.id === mid);
 
   const pick = async id => {
-    setMid(id); setMsg(null); setGoals(""); setCards("");
+    setMid(id); setMsg(null); setGoals([]); setCards([]);
     const sb = getSupabase(); if (!sb || !id) return;
     const { data } = await sb.from("match_facts").select("data").eq("match_id", id).maybeSingle();
     if (data?.data) {
-      const g = (data.data.goals || []).map(x => `${x.side === "a" ? "A" : "H"} ${x.scorer} ${x.minute}${x.extra ? "+" + x.extra : ""}${x.penalty ? " P" : ""}${x.own ? " OG" : ""}`).join("\n");
-      const c = (data.data.cards || []).map(x => `${x.side === "a" ? "A" : "H"} ${x.player} ${x.minute}${x.extra ? "+" + x.extra : ""}${x.red ? " R" : " Y"}`).join("\n");
-      setGoals(g); setCards(c);
+      setGoals((data.data.goals || []).map(g => ({ side: g.side || "h", player: g.scorer || "", minute: g.minute ?? "", penalty: !!g.penalty, own: !!g.own })));
+      setCards((data.data.cards || []).map(c => ({ side: c.side || "h", player: c.player || "", minute: c.minute ?? "", red: c.red !== false })));
     }
   };
 
-  const parseGoals = txt => txt.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
-    const parts = l.split(/\s+/);
-    const side = /^a$/i.test(parts[0]) ? "a" : "h";
-    const rest = /^[ha]$/i.test(parts[0]) ? parts.slice(1) : parts;
-    const flags = rest.filter(t => /^(P|OG)$/i.test(t));
-    const core = rest.filter(t => !/^(P|OG)$/i.test(t));
-    const minTok = core[core.length - 1];
-    const mm = (minTok || "").match(/(\d+)(?:\+(\d+))?/);
-    const scorer = core.slice(0, -1).join(" ");
-    return { side, scorer, minute: mm ? +mm[1] : null, extra: mm && mm[2] ? +mm[2] : null,
-      penalty: flags.some(f => /^P$/i.test(f)), own: flags.some(f => /^OG$/i.test(f)) };
-  }).filter(g => g.scorer);
+  const teamName = side => m ? (side === "a" ? TEAM[m.a]?.name : TEAM[m.h]?.name) : "";
+  const teamId = side => m ? (side === "a" ? m.a : m.h) : null;
 
-  const parseCards = txt => txt.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
-    const parts = l.split(/\s+/);
-    const side = /^a$/i.test(parts[0]) ? "a" : "h";
-    const rest = /^[ha]$/i.test(parts[0]) ? parts.slice(1) : parts;
-    const red = rest.some(t => /^R$/i.test(t));
-    const core = rest.filter(t => !/^[RY]$/i.test(t));
-    const minTok = core[core.length - 1];
-    const mm = (minTok || "").match(/(\d+)(?:\+(\d+))?/);
-    const player = core.slice(0, -1).join(" ");
-    return { side, player, minute: mm ? +mm[1] : null, extra: mm && mm[2] ? +mm[2] : null, red };
-  }).filter(c => c.player);
-
-  // live preview of what WILL be saved
-  const parsedG = mid ? parseGoals(goals) : [];
-  const parsedC = mid ? parseCards(cards) : [];
-  const m = candidates.find(x => x.id === mid);
-  const teamFor = side => m ? (side === "a" ? TEAM[m.a]?.name : TEAM[m.h]?.name) : side;
+  const addGoal = () => setGoals(g => [...g, { side: "h", player: "", minute: "", penalty: false, own: false }]);
+  const addCard = () => setCards(c => [...c, { side: "h", player: "", minute: "", red: true }]);
+  const upG = (i, k, v) => setGoals(g => g.map((x, j) => j === i ? { ...x, [k]: v } : x));
+  const upC = (i, k, v) => setCards(c => c.map((x, j) => j === i ? { ...x, [k]: v } : x));
+  const rmG = i => setGoals(g => g.filter((_, j) => j !== i));
+  const rmC = i => setCards(c => c.filter((_, j) => j !== i));
 
   const save = async () => {
     const sb = getSupabase(); if (!sb || !mid) return;
-    if (parsedG.length === 0 && parsedC.length === 0) {
-      setMsg("\u26a0 Nothing to save — both boxes are empty or unparseable. Type at least one goal or card."); return;
-    }
-    const payload = { goals: parsedG, cards: parsedC };
-    const { error } = await sb.from("match_facts").upsert({ match_id: mid, data: payload });
-    setMsg(error ? `\u26a0 ${error.message}` : `\u2713 Saved ${parsedG.length} goals + ${parsedC.length} cards to match_id "${mid}". Refresh the home page.`);
+    const G = goals.filter(g => g.player.trim() && g.minute !== "").map(g => ({
+      side: g.side, scorer: g.player.trim(), minute: +g.minute, penalty: !!g.penalty, own: !!g.own,
+    }));
+    const C = cards.filter(c => c.player.trim() && c.minute !== "").map(c => ({
+      side: c.side, player: c.player.trim(), minute: +c.minute, red: !!c.red,
+    }));
+    if (G.length === 0 && C.length === 0) { setMsg("\u26a0 Add at least one complete goal or card row (player + minute)."); return; }
+    const { error } = await sb.from("match_facts").upsert({ match_id: mid, data: { goals: G, cards: C } });
+    setMsg(error ? `\u26a0 ${error.message}` : `\u2713 Saved ${G.length} goals + ${C.length} cards. Refresh the home page to see them.`);
   };
+
+  const sideBtn = (cur, val, set, label) => (
+    <button onClick={() => set(val)} className={`chip-btn${cur === val ? " on" : ""}`} style={{ fontSize: 10, padding: "5px 9px", whiteSpace: "nowrap" }}>{label}</button>
+  );
 
   return (
     <>
       <div className="sec-h"><h2>Match facts — goals & cards</h2></div>
       <div className="card">
-        <p className="body2" style={{ fontSize: 12.5, marginBottom: 10 }}>
-          One event per line. Start each line with <strong>H</strong> (home) or <strong>A</strong> (away), then player, then minute.
-          Goals: <code>H Quiñones 9</code> (add <code>P</code> penalty / <code>OG</code> own goal).
-          Cards: <code>A Sithole 50 R</code> (<code>R</code> red / <code>Y</code> yellow). Stoppage time: <code>90+2</code>.
+        <p className="body2" style={{ fontSize: 12.5, marginBottom: 12 }}>
+          Add goals and cards for any match. Pick the team, choose a player (or type one), set the minute, and flag penalties / own goals / reds.
         </p>
-        <select className="inp" value={mid} onChange={e => pick(e.target.value)} style={{ marginBottom: 10 }}>
+        <select className="inp" value={mid} onChange={e => pick(e.target.value)} style={{ marginBottom: 14 }}>
           <option value="">Pick a match…</option>
           {candidates.map(mm => <option key={mm.id} value={mm.id}>{matchName(mm.id)}</option>)}
         </select>
+
         {mid && <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div>
-              <div className="mono-dim" style={{ fontSize: 9.5, marginBottom: 4 }}>GOALS</div>
-              <textarea className="inp left" rows={5} placeholder={"H Quiñones 9\nH Jiménez 67"} value={goals} onChange={e => setGoals(e.target.value)} style={{ fontFamily: "var(--mono)", resize: "vertical", width: "100%" }} />
+          {/* GOALS */}
+          <div className="mono-dim" style={{ fontSize: 10, letterSpacing: ".1em", marginBottom: 8 }}>⚽ GOALS</div>
+          {goals.map((g, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 7, flexWrap: "wrap" }}>
+              {sideBtn(g.side, "h", v => upG(i, "side", v), teamName("h"))}
+              {sideBtn(g.side, "a", v => upG(i, "side", v), teamName("a"))}
+              <PlayerPick team={teamId(g.side)} value={g.player} onChange={v => upG(i, "player", v)} />
+              <input className="inp" style={{ width: 64 }} placeholder="min" inputMode="numeric" value={g.minute} onChange={e => upG(i, "minute", e.target.value.replace(/[^0-9+]/g, ""))} />
+              {sideBtn(g.penalty, true, () => upG(i, "penalty", !g.penalty), "PEN")}
+              {sideBtn(g.own, true, () => upG(i, "own", !g.own), "OG")}
+              <button onClick={() => rmG(i)} className="chip-btn" style={{ fontSize: 12, padding: "4px 9px", color: "#FF3B4E" }}>✕</button>
             </div>
-            <div>
-              <div className="mono-dim" style={{ fontSize: 9.5, marginBottom: 4 }}>CARDS</div>
-              <textarea className="inp left" rows={5} placeholder={"H Montes 90+2 R\nA Sithole 50 R"} value={cards} onChange={e => setCards(e.target.value)} style={{ fontFamily: "var(--mono)", resize: "vertical", width: "100%" }} />
+          ))}
+          <button className="chip-btn" onClick={addGoal} style={{ fontSize: 11, marginBottom: 16 }}>+ Add goal</button>
+
+          {/* CARDS */}
+          <div className="mono-dim" style={{ fontSize: 10, letterSpacing: ".1em", marginBottom: 8 }}>🟥 CARDS</div>
+          {cards.map((c, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 7, flexWrap: "wrap" }}>
+              {sideBtn(c.side, "h", v => upC(i, "side", v), teamName("h"))}
+              {sideBtn(c.side, "a", v => upC(i, "side", v), teamName("a"))}
+              <PlayerPick team={teamId(c.side)} value={c.player} onChange={v => upC(i, "player", v)} />
+              <input className="inp" style={{ width: 64 }} placeholder="min" inputMode="numeric" value={c.minute} onChange={e => upC(i, "minute", e.target.value.replace(/[^0-9+]/g, ""))} />
+              {sideBtn(c.red, true, () => upC(i, "red", true), "RED")}
+              {sideBtn(!c.red, true, () => upC(i, "red", false), "YEL")}
+              <button onClick={() => rmC(i)} className="chip-btn" style={{ fontSize: 12, padding: "4px 9px", color: "#FF3B4E" }}>✕</button>
             </div>
-          </div>
+          ))}
+          <button className="chip-btn" onClick={addCard} style={{ fontSize: 11, marginBottom: 16 }}>+ Add card</button>
 
-          {/* LIVE PREVIEW so you see exactly what will save */}
-          <div style={{ marginTop: 12, padding: 10, background: "var(--navy1)", border: "1px solid var(--line)", borderRadius: 8 }}>
-            <div className="mono-dim" style={{ fontSize: 9.5, marginBottom: 6 }}>PREVIEW — THIS IS WHAT WILL BE SAVED</div>
-            {parsedG.length === 0 && parsedC.length === 0
-              ? <p className="mono-dim" style={{ fontSize: 11, color: "#FF3B4E" }}>Nothing parsed yet — type goals or cards above.</p>
-              : <div style={{ fontSize: 12, fontFamily: "var(--mono)", lineHeight: 1.6 }}>
-                  {parsedG.map((g, i) => <div key={"g" + i}>⚽ {teamFor(g.side)}: {g.scorer} {g.minute}{g.extra ? "+" + g.extra : ""}'{g.penalty ? " (pen)" : ""}{g.own ? " (OG)" : ""}</div>)}
-                  {parsedC.map((c, i) => <div key={"c" + i}>{c.red ? "🟥" : "🟨"} {teamFor(c.side)}: {c.player} {c.minute}{c.extra ? "+" + c.extra : ""}'</div>)}
-                </div>}
-          </div>
-
-          <button className="btn-g sm" onClick={save} style={{ marginTop: 10 }} disabled={parsedG.length === 0 && parsedC.length === 0}>
-            Save match facts
-          </button>
+          <div><button className="btn-g sm" onClick={save}>Save match facts</button></div>
         </>}
-        {msg && <div className="mono-dim" style={{ fontSize: 11, marginTop: 8, color: msg.startsWith("\u2713") ? "var(--green)" : "#FF3B4E" }}>{msg}</div>}
+        {msg && <div className="mono-dim" style={{ fontSize: 11, marginTop: 10, color: msg.startsWith("\u2713") ? "var(--green)" : "#FF3B4E" }}>{msg}</div>}
       </div>
     </>
   );
