@@ -13,15 +13,20 @@ const SPOTLIGHT = ["bra", "ger", "arg", "fra"];
 
 /* match facts: prefer manually-entered goals/cards, else API events */
 function useFacts(m) {
-  const [data, setData] = useState(() => m.facts ? { goals: m.facts.goals || [], cards: m.facts.cards || [] } : null);
+  const [data, setData] = useState(null);
   useEffect(() => {
-    if (m.facts) { setData({ goals: m.facts.goals || [], cards: m.facts.cards || [] }); return; }
-    if (!m.afId) return;
+    // Always prefer manually-entered facts — re-runs whenever m.facts arrives
+    if (m.facts) {
+      setData({ goals: m.facts.goals || [], cards: m.facts.cards || [] });
+      return;
+    }
+    // Fall back to API events only if no manual facts and we have an AF fixture id
+    if (!m.afId) { setData({ goals: [], cards: [] }); return; }
     fetch(`/api/events?fid=${m.afId}`)
       .then(r => r.json())
       .then(d => setData({ goals: d.goals || [], cards: d.cards || [] }))
       .catch(() => setData({ goals: [], cards: [] }));
-  }, [m.afId, m.facts]);
+  }, [m.id, m.afId, m.facts]);
   return data;
 }
 
