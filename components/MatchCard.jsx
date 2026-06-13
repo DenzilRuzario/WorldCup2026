@@ -29,17 +29,12 @@ function Side({ id, label, onTeam }) {
   );
 }
 
-export default function MatchCard({ m, now, onTeam, onOpen, big }) {
+export default function MatchCard({ m, now, onTeam, big }) {
   const s = statusOf(m, now);
   const hasScore = s !== "up" && m.hs !== null && m.hs !== undefined;
   const label = m.group ? `GROUP ${m.group}` : (m.stage || "").replace(/_/g, " ");
-  // panel opens when live, or within 45 min of kickoff
-  const panelReady = s === "live" || (s === "up" && new Date(m.ko) - now <= 45 * 60000);
-  const open = e => { if (panelReady && onOpen) onOpen(m); };
   return (
-    <div className={`mcard lift${big ? " mcard-big" : ""}`} onClick={open}
-      style={panelReady && onOpen ? { cursor: "pointer" } : undefined}
-      title={panelReady && onOpen ? "Tap for lineups" : undefined}>
+    <div className={`mcard lift${big ? " mcard-big" : ""}`}>
       <div className="top">
         <span>{label} · {fmtDay(m.ko)} · {fmtTime(m.ko)}</span>
         <Badge s={s} minute={m.minute} />
@@ -52,7 +47,7 @@ export default function MatchCard({ m, now, onTeam, onOpen, big }) {
         <Side id={m.a} label={m.aLabel} onTeam={onTeam} />
       </div>
       <div className={`foot${s === "live" ? " live" : ""}`}>
-        {s === "live" ? `▸ Live — tap for lineups${m.updatedAt ? ` · score ${Math.max(1, Math.round((now - m.updatedAt) / 60000))}m old` : ""}${m.overridden ? " · manual" : ""}` : s === "up" ? (panelReady ? `Kickoff in ${countdown(m.ko, now)} — tap for lineups` : `Kickoff in ${countdown(m.ko, now)}`) : (m.venue ? m.venue.split(",")[0] : "Full time")}
+        {s === "live" ? `▸ Live${m.updatedAt ? ` · score ${Math.max(1, Math.round((now - m.updatedAt) / 60000))}m old` : ""}${m.overridden ? " · manual" : ""}` : s === "up" ? `Kickoff in ${countdown(m.ko, now)}` : (m.venue ? m.venue.split(",")[0] : "Full time")}
       </div>
     </div>
   );
