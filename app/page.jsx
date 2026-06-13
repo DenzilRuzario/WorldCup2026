@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { TEAM } from "@/lib/teams";
+import { getSupabase } from "@/lib/supabase";
 import { useMatches, statusOf, fmtDay, fmtTime } from "@/components/useMatches";
 import MatchCard from "@/components/MatchCard";
 import QuickPanel from "@/components/QuickPanel";
@@ -15,18 +16,29 @@ const SPOTLIGHT = ["bra", "ger", "arg", "fra"];
 function useFacts(m) {
   const [data, setData] = useState(null);
   useEffect(() => {
-    // Always prefer manually-entered facts — re-runs whenever m.facts arrives
-    if (m.facts) {
-      setData({ goals: m.facts.goals || [], cards: m.facts.cards || [] });
-      return;
-    }
-    // Fall back to API events only if no manual facts and we have an AF fixture id
-    if (!m.afId) { setData({ goals: [], cards: [] }); return; }
-    fetch(`/api/events?fid=${m.afId}`)
-      .then(r => r.json())
-      .then(d => setData({ goals: d.goals || [], cards: d.cards || [] }))
+    if (!m.id) return;
+    const sb = getSupabase();
+    if (!sb) { setData({ goals: [], cards: [] }); return; }
+    // Read directly from Supabase — bypasses the Next.js server cache entirely
+    sb.from("match_facts")
+      .select("data")
+      .eq("match_id", m.id)
+      .maybeSingle()
+      .then(({ data: row }) => {
+        if (row?.data) {
+          setData({ goals: row.data.goals || [], cards: row.data.cards || [] });
+        } else if (m.afId) {
+          // No manual facts — fall back to API events
+          fetch(`/api/events?fid=${m.afId}`)
+            .then(r => r.json())
+            .then(d => setData({ goals: d.goals || [], cards: d.cards || [] }))
+            .catch(() => setData({ goals: [], cards: [] }));
+        } else {
+          setData({ goals: [], cards: [] });
+        }
+      })
       .catch(() => setData({ goals: [], cards: [] }));
-  }, [m.id, m.afId, m.facts]);
+  }, [m.id, m.afId]);
   return data;
 }
 
