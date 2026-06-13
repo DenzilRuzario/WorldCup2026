@@ -6,7 +6,6 @@ import { getSupabase } from "@/lib/supabase";
 import { useMatches, statusOf, fmtDay, fmtTime } from "@/components/useMatches";
 import MatchCard from "@/components/MatchCard";
 import QuickPanel from "@/components/QuickPanel";
-import MatchPanel from "@/components/MatchPanel";
 import Flag from "@/components/Flag";
 import Trophy from "@/components/Trophy";
 
@@ -19,26 +18,15 @@ function useFacts(m) {
     if (!m.id) return;
     const sb = getSupabase();
     if (!sb) { setData({ goals: [], cards: [] }); return; }
-    // Read directly from Supabase — bypasses the Next.js server cache entirely
     sb.from("match_facts")
       .select("data")
       .eq("match_id", m.id)
       .maybeSingle()
       .then(({ data: row }) => {
-        if (row?.data) {
-          setData({ goals: row.data.goals || [], cards: row.data.cards || [] });
-        } else if (m.afId) {
-          // No manual facts — fall back to API events
-          fetch(`/api/events?fid=${m.afId}`)
-            .then(r => r.json())
-            .then(d => setData({ goals: d.goals || [], cards: d.cards || [] }))
-            .catch(() => setData({ goals: [], cards: [] }));
-        } else {
-          setData({ goals: [], cards: [] });
-        }
+        setData(row?.data ? { goals: row.data.goals || [], cards: row.data.cards || [] } : { goals: [], cards: [] });
       })
       .catch(() => setData({ goals: [], cards: [] }));
-  }, [m.id, m.afId]);
+  }, [m.id]);
   return data;
 }
 
@@ -123,9 +111,6 @@ function ResultCard({ m }) {
         </span>
       </div>
       <Facts m={m} facts={facts} />
-      {facts === null && m.afId && (
-        <div className="mono-dim" style={{ fontSize: 9.5, marginTop: 6 }}>Loading match facts…</div>
-      )}
     </div>
   );
 }
@@ -133,7 +118,6 @@ function ResultCard({ m }) {
 export default function Home() {
   const { matches, source, loading } = useMatches();
   const [quick, setQuick] = useState(null);
-  const [panel, setPanel] = useState(null);
   const [shrunk, setShrunk] = useState(false);
   const now = new Date();
 
@@ -172,7 +156,7 @@ export default function Home() {
             <h2>Live</h2><span className="badge live">LIVE</span>
           </div>
           <div className="live-stage">
-            {live.map(m => <MatchCard key={m.id} m={m} now={now} onTeam={setQuick} onOpen={setPanel} big />)}
+            {live.map(m => <MatchCard key={m.id} m={m} now={now} onTeam={setQuick} big />)}
           </div>
         </>}
 
@@ -185,7 +169,7 @@ export default function Home() {
           ? <p className="mono-dim">Loading fixtures…</p>
           : upcoming.length
             ? <div className="grid auto-280">
-                {upcoming.map(m => <MatchCard key={m.id} m={m} now={now} onTeam={setQuick} onOpen={setPanel} />)}
+                {upcoming.map(m => <MatchCard key={m.id} m={m} now={now} onTeam={setQuick} />)}
               </div>
             : <p className="mono-dim">No upcoming matches scheduled — check back soon.</p>}
 
@@ -217,7 +201,6 @@ export default function Home() {
       </div>
 
       {quick && <QuickPanel id={quick} onClose={() => setQuick(null)} />}
-      {panel && <MatchPanel m={matches.find(x => x.id === panel.id) || panel} now={now} onClose={() => setPanel(null)} />}
     </main>
   );
 }
