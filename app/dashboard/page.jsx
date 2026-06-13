@@ -106,24 +106,19 @@ function MatchFacts({ matches, matchName }) {
   const [goals, setGoals] = useState("");
   const [cards, setCards] = useState("");
   const [msg, setMsg] = useState(null);
-  const [loaded, setLoaded] = useState(false);
   const candidates = matches.filter(m => m.h && m.a);
 
-  // load existing facts when a match is picked
   const pick = async id => {
-    setMid(id); setMsg(null); setLoaded(false);
-    setGoals(""); setCards("");
+    setMid(id); setMsg(null); setGoals(""); setCards("");
     const sb = getSupabase(); if (!sb || !id) return;
     const { data } = await sb.from("match_facts").select("data").eq("match_id", id).maybeSingle();
     if (data?.data) {
-      const g = (data.data.goals || []).map(x => `${x.side === "a" ? "A" : "H"} ${x.scorer} ${x.minute}${x.penalty ? " P" : ""}${x.own ? " OG" : ""}`).join("\n");
-      const c = (data.data.cards || []).map(x => `${x.side === "a" ? "A" : "H"} ${x.player} ${x.minute}${x.red ? " R" : " Y"}`).join("\n");
+      const g = (data.data.goals || []).map(x => `${x.side === "a" ? "A" : "H"} ${x.scorer} ${x.minute}${x.extra ? "+" + x.extra : ""}${x.penalty ? " P" : ""}${x.own ? " OG" : ""}`).join("\n");
+      const c = (data.data.cards || []).map(x => `${x.side === "a" ? "A" : "H"} ${x.player} ${x.minute}${x.extra ? "+" + x.extra : ""}${x.red ? " R" : " Y"}`).join("\n");
       setGoals(g); setCards(c);
     }
-    setLoaded(true);
   };
 
-  // parse "H Scorer 67 [P|OG]" lines
   const parseGoals = txt => txt.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
     const parts = l.split(/\s+/);
     const side = /^a$/i.test(parts[0]) ? "a" : "h";
@@ -149,11 +144,20 @@ function MatchFacts({ matches, matchName }) {
     return { side, player, minute: mm ? +mm[1] : null, extra: mm && mm[2] ? +mm[2] : null, red };
   }).filter(c => c.player);
 
+  // live preview of what WILL be saved
+  const parsedG = mid ? parseGoals(goals) : [];
+  const parsedC = mid ? parseCards(cards) : [];
+  const m = candidates.find(x => x.id === mid);
+  const teamFor = side => m ? (side === "a" ? TEAM[m.a]?.name : TEAM[m.h]?.name) : side;
+
   const save = async () => {
     const sb = getSupabase(); if (!sb || !mid) return;
-    const payload = { goals: parseGoals(goals), cards: parseCards(cards) };
+    if (parsedG.length === 0 && parsedC.length === 0) {
+      setMsg("\u26a0 Nothing to save — both boxes are empty or unparseable. Type at least one goal or card."); return;
+    }
+    const payload = { goals: parsedG, cards: parsedC };
     const { error } = await sb.from("match_facts").upsert({ match_id: mid, data: payload });
-    setMsg(error ? `\u26a0 ${error.message}` : `\u2713 Saved for match_id="${mid}": ${payload.goals.length} goals, ${payload.cards.length} cards.`);
+    setMsg(error ? `\u26a0 ${error.message}` : `\u2713 Saved ${parsedG.length} goals + ${parsedC.length} cards to match_id "${mid}". Refresh the home page.`);
   };
 
   return (
@@ -161,26 +165,41 @@ function MatchFacts({ matches, matchName }) {
       <div className="sec-h"><h2>Match facts — goals & cards</h2></div>
       <div className="card">
         <p className="body2" style={{ fontSize: 12.5, marginBottom: 10 }}>
-          Manually enter goalscorers and cards (zero API cost, permanent). One per line.
-          Start each line with <strong>H</strong> (home) or <strong>A</strong> (away).
-          Goals: <code>H Quiñones 9</code> · add <code>P</code> for penalty, <code>OG</code> for own goal.
-          Cards: <code>A Sithole 50 R</code> (<code>R</code> = red, <code>Y</code> = yellow).
+          One event per line. Start each line with <strong>H</strong> (home) or <strong>A</strong> (away), then player, then minute.
+          Goals: <code>H Quiñones 9</code> (add <code>P</code> penalty / <code>OG</code> own goal).
+          Cards: <code>A Sithole 50 R</code> (<code>R</code> red / <code>Y</code> yellow). Stoppage time: <code>90+2</code>.
         </p>
         <select className="inp" value={mid} onChange={e => pick(e.target.value)} style={{ marginBottom: 10 }}>
           <option value="">Pick a match…</option>
-          {candidates.map(m => <option key={m.id} value={m.id}>{matchName(m.id)}</option>)}
+          {candidates.map(mm => <option key={mm.id} value={mm.id}>{matchName(mm.id)}</option>)}
         </select>
-        {mid && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div>
-            <div className="mono-dim" style={{ fontSize: 9.5, marginBottom: 4 }}>GOALS</div>
-            <textarea className="inp left" rows={5} placeholder={"H Quiñones 9\nH Jiménez 67"} value={goals} onChange={e => setGoals(e.target.value)} style={{ fontFamily: "var(--mono)", resize: "vertical" }} />
+        {mid && <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <div className="mono-dim" style={{ fontSize: 9.5, marginBottom: 4 }}>GOALS</div>
+              <textarea className="inp left" rows={5} placeholder={"H Quiñones 9\nH Jiménez 67"} value={goals} onChange={e => setGoals(e.target.value)} style={{ fontFamily: "var(--mono)", resize: "vertical", width: "100%" }} />
+            </div>
+            <div>
+              <div className="mono-dim" style={{ fontSize: 9.5, marginBottom: 4 }}>CARDS</div>
+              <textarea className="inp left" rows={5} placeholder={"H Montes 90+2 R\nA Sithole 50 R"} value={cards} onChange={e => setCards(e.target.value)} style={{ fontFamily: "var(--mono)", resize: "vertical", width: "100%" }} />
+            </div>
           </div>
-          <div>
-            <div className="mono-dim" style={{ fontSize: 9.5, marginBottom: 4 }}>CARDS</div>
-            <textarea className="inp left" rows={5} placeholder={"H Montes 90+2 R\nA Sithole 50 R"} value={cards} onChange={e => setCards(e.target.value)} style={{ fontFamily: "var(--mono)", resize: "vertical" }} />
+
+          {/* LIVE PREVIEW so you see exactly what will save */}
+          <div style={{ marginTop: 12, padding: 10, background: "var(--navy1)", border: "1px solid var(--line)", borderRadius: 8 }}>
+            <div className="mono-dim" style={{ fontSize: 9.5, marginBottom: 6 }}>PREVIEW — THIS IS WHAT WILL BE SAVED</div>
+            {parsedG.length === 0 && parsedC.length === 0
+              ? <p className="mono-dim" style={{ fontSize: 11, color: "#FF3B4E" }}>Nothing parsed yet — type goals or cards above.</p>
+              : <div style={{ fontSize: 12, fontFamily: "var(--mono)", lineHeight: 1.6 }}>
+                  {parsedG.map((g, i) => <div key={"g" + i}>⚽ {teamFor(g.side)}: {g.scorer} {g.minute}{g.extra ? "+" + g.extra : ""}'{g.penalty ? " (pen)" : ""}{g.own ? " (OG)" : ""}</div>)}
+                  {parsedC.map((c, i) => <div key={"c" + i}>{c.red ? "🟥" : "🟨"} {teamFor(c.side)}: {c.player} {c.minute}{c.extra ? "+" + c.extra : ""}'</div>)}
+                </div>}
           </div>
-        </div>}
-        {mid && <button className="btn-g sm" onClick={save} style={{ marginTop: 10 }}>Save match facts</button>}
+
+          <button className="btn-g sm" onClick={save} style={{ marginTop: 10 }} disabled={parsedG.length === 0 && parsedC.length === 0}>
+            Save match facts
+          </button>
+        </>}
         {msg && <div className="mono-dim" style={{ fontSize: 11, marginTop: 8, color: msg.startsWith("\u2713") ? "var(--green)" : "#FF3B4E" }}>{msg}</div>}
       </div>
     </>
