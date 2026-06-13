@@ -146,23 +146,35 @@ export default function MatchPanel({ m, now, onClose }) {
   }, [onClose]);
 
   useEffect(() => {
-    if (!m.afId) { setLineups([]); return; }
     let alive = true;
-    const load = async () => {
+    const load = async (fid) => {
       try {
         const [lr, er] = await Promise.all([
-          fetch(`/api/lineup?fid=${m.afId}`).then(r => r.json()),
-          s !== "up" ? fetch(`/api/events?fid=${m.afId}`).then(r => r.json()) : Promise.resolve({ subs: [] }),
+          fetch(`/api/lineup?fid=${fid}`).then(r => r.json()),
+          s !== "up" ? fetch(`/api/events?fid=${fid}`).then(r => r.json()) : Promise.resolve({ subs: [] }),
         ]);
         if (!alive) return;
         setLineups(lr.lineups || []);
         setSubs(er.subs || []);
       } catch { if (alive) setLineups([]); }
     };
-    load();
-    const t = setInterval(load, 300000);
+
+    const init = async () => {
+      // Use afId from match object if available
+      if (m.afId) { load(m.afId); return; }
+      // Otherwise resolve the fixture id ourselves via the lookup endpoint
+      try {
+        const ko = new Date(m.ko).toISOString().slice(0, 10);
+        const r = await fetch(`/api/fixture-lookup?h=${m.h}&a=${m.a}&date=${ko}`);
+        const d = await r.json();
+        if (d.fid && alive) load(d.fid);
+        else if (alive) setLineups([]);
+      } catch { if (alive) setLineups([]); }
+    };
+    init();
+    const t = setInterval(() => { if (m.afId) load(m.afId); }, 300000);
     return () => { alive = false; clearInterval(t); };
-  }, [m.afId, s]);
+  }, [m.afId, m.h, m.a, m.ko, s]);
 
   const hLu = lineups?.find(l => sameP(l.team, H.name)) || lineups?.[0];
   const aLu = lineups?.find(l => l !== hLu) || lineups?.[1];
