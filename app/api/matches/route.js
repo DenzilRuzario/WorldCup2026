@@ -168,18 +168,10 @@ export async function GET() {
 
   // Persistence layer: finished scores live in Supabase forever, so the site
   // keeps full history even if every provider dies. Manual overrides win last.
-  const [stored, overrides, facts] = await Promise.all([
+  const [stored, overrides] = await Promise.all([
     sbGet("results?select=match_id,home,away"),
     sbGet("overrides?select=*"),
-    sbGet("match_facts?select=*"),
   ]);
-
-  // Manually-entered goals + cards (zero API cost, permanent). When present
-  // for a match, these are authoritative for the scorer/card infographic.
-  for (const f of facts || []) {
-    const m = matches.find(x => x.id === f.match_id);
-    if (m) m.facts = f.data;
-  }
 
   if (stored) {
     for (const m of matches) {
