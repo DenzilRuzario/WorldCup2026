@@ -153,7 +153,7 @@ function MatchFacts({ matches, matchName }) {
     const sb = getSupabase(); if (!sb || !mid) return;
     const payload = { goals: parseGoals(goals), cards: parseCards(cards) };
     const { error } = await sb.from("match_facts").upsert({ match_id: mid, data: payload });
-    setMsg(error ? `\u26a0 ${error.message}` : `\u2713 Saved ${payload.goals.length} goals, ${payload.cards.length} cards \u2014 live on the site within a minute.`);
+    setMsg(error ? `\u26a0 ${error.message}` : `\u2713 Saved for match_id="${mid}": ${payload.goals.length} goals, ${payload.cards.length} cards.`);
   };
 
   return (
