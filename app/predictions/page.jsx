@@ -288,6 +288,172 @@ function Ballot({ name }) {
   );
 }
 
+/* ---------------- leaderboards ---------------- */
+const outcomeOf = (h, a) => h > a ? "h" : h < a ? "a" : "d";
+
+function UserDetail({ user, mode, onClose }) {
+  if (!user) return null;
+  const acc = user.total > 0 ? Math.round((mode === "outcome" ? user.correct : user.exact) / user.total * 100) : 0;
+  const ptColor = { 3: "var(--green)", 2: "var(--gold)", 1: "#f59e0b", 0: "var(--txt3)" };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16, backdropFilter: "blur(4px)" }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto", position: "relative" }}>
+        <button onClick={onClose} style={{ position: "absolute", top: 12, right: 12, background: "var(--navy1)", border: "1px solid var(--line)", color: "var(--txt2)", width: 28, height: 28, borderRadius: "50%", cursor: "pointer", fontSize: 13 }}>×</button>
+        <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 22, textTransform: "uppercase", marginBottom: 4 }}>{user.name}</div>
+        <div className="mono-dim" style={{ fontSize: 10.5, letterSpacing: ".1em", marginBottom: 16 }}>{mode === "outcome" ? "MATCH WINNER PREDICTIONS" : "EXACT SCORE PREDICTIONS"}</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: user.predictions ? 18 : 0 }}>
+          {[
+            [user.total, "Predictions"],
+            mode === "outcome" ? [user.correct, "Correct"] : [user.exact, "Exact"],
+            [user.points, "Points", true],
+            [acc + "%", mode === "outcome" ? "Accuracy" : "Exact rate"],
+          ].map(([v, l, gold]) => (
+            <div key={l} style={{ flex: 1, minWidth: 72, textAlign: "center", background: "var(--navy1)", border: "1px solid " + (gold ? "rgba(52,232,107,.3)" : "var(--line)"), borderRadius: 10, padding: "10px 8px" }}>
+              <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 22, color: gold ? "var(--green)" : "var(--txt)" }}>{v}</div>
+              <div className="mono-dim" style={{ fontSize: 9, letterSpacing: ".08em", marginTop: 2 }}>{l.toUpperCase()}</div>
+            </div>
+          ))}
+        </div>
+        {mode === "score" && user.predictions?.length > 0 && (
+          <div>
+            <div className="mono-dim" style={{ fontSize: 9.5, letterSpacing: ".12em", marginBottom: 8 }}>SCORE PREDICTIONS</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              {user.predictions.map((p, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: "var(--navy1)", borderRadius: 8, padding: "7px 11px", borderLeft: "3px solid " + ptColor[p.pts] }}>
+                  <span className="body2" style={{ fontSize: 12, flex: 1 }}>{p.homeName} vs {p.awayName}</span>
+                  <span className="body2" style={{ fontSize: 12 }}>{p.ph}–{p.pa} <span style={{ color: "var(--txt3)" }}>vs</span> {p.ah}–{p.aa}</span>
+                  <span style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700, color: ptColor[p.pts] }}>+{p.pts}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LBTable({ rows, mode, title, scoring }) {
+  const [sel, setSel] = useState(null);
+  const [vis, setVis] = useState(10);
+  const medal = r => r === 1 ? "🥇" : r === 2 ? "🥈" : r === 3 ? "🥉" : r;
+  return (
+    <div className="card" style={{ marginBottom: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        <div style={{ fontFamily: "var(--disp)", fontWeight: 900, fontSize: 17, textTransform: "uppercase" }}>{title}</div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+          {scoring.map(([p, l]) => <span key={l} className="mono-dim" style={{ fontSize: 9.5 }}><span style={{ color: "var(--green)" }}>{p}</span> {l}</span>)}
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p className="mono-dim" style={{ fontSize: 12 }}>No scored predictions yet — the board fills in once matches finish.</p>
+      ) : (
+        <>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                  {["#", "Name", "Played", mode === "outcome" ? "Correct" : "Exact", "Pts"].map((h, i) => (
+                    <th key={h} className="mono-dim" style={{ padding: "6px 8px", fontSize: 9.5, letterSpacing: ".08em", textAlign: i === 1 ? "left" : "center", fontWeight: 600 }}>{h.toUpperCase()}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.slice(0, vis).map((r, i) => (
+                  <tr key={r.name} onClick={() => setSel(r)} className="lift" style={{ borderBottom: "1px solid var(--line-soft)", cursor: "pointer", background: i < 3 ? "rgba(52,232,107,.03)" : "transparent" }}>
+                    <td style={{ padding: "9px 8px", textAlign: "center", fontFamily: "var(--mono)", fontSize: i < 3 ? 15 : 12, color: "var(--txt2)" }}>{medal(i + 1)}</td>
+                    <td style={{ padding: "9px 8px", fontWeight: 600 }}>{r.name}</td>
+                    <td style={{ padding: "9px 8px", textAlign: "center", color: "var(--txt2)" }}>{r.total}</td>
+                    <td style={{ padding: "9px 8px", textAlign: "center", color: "var(--txt2)" }}>{mode === "outcome" ? r.correct : r.exact}</td>
+                    <td style={{ padding: "9px 8px", textAlign: "center", fontFamily: "var(--disp)", fontWeight: 900, fontSize: 15, color: "var(--green)" }}>{r.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rows.length > vis && (
+            <button onClick={() => setVis(v => v + 10)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: "var(--gold)", fontFamily: "var(--mono)", fontSize: 11, cursor: "pointer" }}>
+              SHOW MORE ({rows.length - vis})
+            </button>
+          )}
+        </>
+      )}
+      {sel && <UserDetail user={sel} mode={mode} onClose={() => setSel(null)} />}
+    </div>
+  );
+}
+
+function Leaderboards({ matches }) {
+  const [votes, setVotes] = useState(null);
+  const [preds, setPreds] = useState(null);
+  useEffect(() => {
+    const sb = getSupabase(); if (!sb) { setVotes([]); setPreds([]); return; }
+    (async () => {
+      const [v, p] = await Promise.all([
+        sb.from("votes").select("match_id,pick,name"),
+        sb.from("score_predictions").select("match_id,name,home,away"),
+      ]);
+      setVotes(v.data || []);
+      setPreds(p.data || []);
+    })();
+  }, []);
+
+  if (votes === null || preds === null) return <p className="mono-dim">Calculating standings…</p>;
+
+  // Finished matches only (use statusOf for canonical FT detection)
+  const now = new Date();
+  const finished = {};
+  for (const m of matches) {
+    if (m.h && m.a && m.hs !== null && m.as !== null && statusOf(m, now) === "ft") {
+      finished[String(m.id)] = m;
+    }
+  }
+
+  // Outcome leaderboard
+  const oUsers = {};
+  for (const v of votes) {
+    const nm = (v.name || "").trim(); if (!nm) continue;
+    const m = finished[String(v.match_id)];
+    if (!oUsers[nm]) oUsers[nm] = { name: nm, total: 0, correct: 0, points: 0 };
+    if (m) {
+      oUsers[nm].total++;
+      if (v.pick === outcomeOf(m.hs, m.as)) { oUsers[nm].correct++; oUsers[nm].points++; }
+    }
+  }
+  const outcomeLB = Object.values(oUsers).filter(u => u.total > 0)
+    .sort((a, b) => b.points - a.points || (b.correct / b.total) - (a.correct / a.total));
+
+  // Score leaderboard
+  const sUsers = {};
+  for (const p of preds) {
+    const nm = (p.name || "").trim(); if (!nm) continue;
+    const m = finished[String(p.match_id)];
+    if (!sUsers[nm]) sUsers[nm] = { name: nm, total: 0, exact: 0, points: 0, predictions: [] };
+    if (m) {
+      const diff = Math.abs(p.home - m.hs) + Math.abs(p.away - m.as);
+      const pts = diff === 0 ? 3 : diff === 1 ? 2 : diff === 2 ? 1 : 0;
+      sUsers[nm].total++;
+      sUsers[nm].points += pts;
+      if (pts === 3) sUsers[nm].exact++;
+      sUsers[nm].predictions.push({
+        homeName: TEAM[m.h]?.name || m.h, awayName: TEAM[m.a]?.name || m.a,
+        ph: p.home, pa: p.away, ah: m.hs, aa: m.as, pts,
+      });
+    }
+  }
+  const scoreLB = Object.values(sUsers).filter(u => u.total > 0).sort((a, b) => b.points - a.points);
+
+  return (
+    <>
+      <div className="mono-dim" style={{ marginBottom: 14, fontSize: 11, letterSpacing: ".1em" }}>
+        🏆 SCORED FROM EVERY FINISHED MATCH — TAP A ROW FOR A FULL BREAKDOWN
+      </div>
+      <LBTable rows={outcomeLB} mode="outcome" title="Match Winner" scoring={[["+1", "correct outcome"]]} />
+      <LBTable rows={scoreLB} mode="score" title="Exact Score" scoring={[["+3", "exact"], ["+2", "1-goal diff"], ["+1", "2-goal diff"]]} />
+    </>
+  );
+}
+
 /* ---------------- page ---------------- */
 export default function Predictions() {
   const { matches, loading } = useMatches();
@@ -322,7 +488,7 @@ export default function Predictions() {
       <IdentityBar name={name} setName={setName} />
 
       <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-        {[["up", "Match Predictions"], ["ft", "Results"], ["ballot", "Tournament Ballot"]].map(([k, l]) => (
+        {[["up", "Match Predictions"], ["ft", "Results"], ["leaderboard", "Leaderboards"], ["ballot", "Tournament Ballot"]].map(([k, l]) => (
           <button key={k} className={`chip-btn${tab === k ? " on" : ""}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -337,6 +503,7 @@ export default function Predictions() {
       {tab === "ft" && (done.length
         ? <div className="grid auto-300">{done.map(m => <RecapCard key={m.id} m={m} />)}</div>
         : <p className="mono-dim">No finished matches yet — recaps appear here after full time.</p>)}
+      {tab === "leaderboard" && (loading ? <p className="mono-dim">Loading fixtures…</p> : <Leaderboards matches={matches} />)}
       {tab === "ballot" && <Ballot name={name} />}
     </main>
   );
