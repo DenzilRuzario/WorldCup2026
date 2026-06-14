@@ -1,14 +1,14 @@
 'use client';
 
 // app/leaderboards/page.js
-// Prediction Leaderboards — computed from Supabase votes + results tables.
+// Prediction Leaderboards - computed from Supabase votes + results tables.
 // No extra API calls. All calculations happen client-side from stored data.
 
 import { createClient } from '@/lib/supabase/client';
 import { useEffect, useState, useCallback } from 'react';
 import { scoreExactPrediction, getOutcome } from '@/lib/standings';
 
-// ─── Score prediction leaderboard utils ─────────────────────────────────────
+// --- Score prediction leaderboard utils -------------------------------------
 
 function buildOutcomeLB(votes, results) {
   // votes row: { user_name, match_id, vote } where vote is 'home'|'draw'|'away'
@@ -19,7 +19,7 @@ function buildOutcomeLB(votes, results) {
     resultMap[r.match_id] = getOutcome(Number(r.home_score), Number(r.away_score));
   }
 
-  const users = {}; // name → { name, total, correct }
+  const users = {}; // name ? { name, total, correct }
   for (const v of votes) {
     const name = v.user_name?.trim();
     if (!name) continue;
@@ -78,16 +78,16 @@ function buildScoreLB(scorePredictions, results) {
   return Object.values(users).sort((a, b) => b.points - a.points);
 }
 
-// ─── Rank badge ──────────────────────────────────────────────────────────────
+// --- Rank badge --------------------------------------------------------------
 
 function RankBadge({ rank }) {
-  if (rank === 1) return <span className="rank-badge rank-gold">🥇</span>;
-  if (rank === 2) return <span className="rank-badge rank-silver">🥈</span>;
-  if (rank === 3) return <span className="rank-badge rank-bronze">🥉</span>;
+  if (rank === 1) return <span className="rank-badge rank-gold">?</span>;
+  if (rank === 2) return <span className="rank-badge rank-silver">?</span>;
+  if (rank === 3) return <span className="rank-badge rank-bronze">?</span>;
   return <span className="rank-badge rank-num">{rank}</span>;
 }
 
-// ─── User Profile Modal ──────────────────────────────────────────────────────
+// --- User Profile Modal ------------------------------------------------------
 
 function UserModal({ user, mode, onClose }) {
   if (!user) return null;
@@ -99,7 +99,7 @@ function UserModal({ user, mode, onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+        <button className="modal-close" onClick={onClose} aria-label="Close">?</button>
         <div className="modal-header">
           <div className="modal-avatar">{user.name.slice(0,2).toUpperCase()}</div>
           <div>
@@ -155,10 +155,10 @@ function UserModal({ user, mode, onClose }) {
                   </span>
                   <span className="pred-scores">
                     <span className="pred-label">Predicted:</span>{' '}
-                    <strong>{p.pred_home}–{p.pred_away}</strong>
-                    {' · '}
+                    <strong>{p.pred_home}-{p.pred_away}</strong>
+                    {' ? '}
                     <span className="pred-label">Actual:</span>{' '}
-                    <strong>{p.act_home}–{p.act_away}</strong>
+                    <strong>{p.act_home}-{p.act_away}</strong>
                   </span>
                   <span className={`pred-pts pts-${p.pts}`}>+{p.pts}pts</span>
                 </div>
@@ -171,7 +171,7 @@ function UserModal({ user, mode, onClose }) {
   );
 }
 
-// ─── Leaderboard Table ────────────────────────────────────────────────────────
+// --- Leaderboard Table --------------------------------------------------------
 
 function LeaderboardTable({ rows, mode, title, description }) {
   const [selectedUser, setSelectedUser] = useState(null);
@@ -202,7 +202,7 @@ function LeaderboardTable({ rows, mode, title, description }) {
 
       {rows.length === 0 ? (
         <div className="lb-empty">
-          <p>No results to score yet — check back after matches are played.</p>
+          <p>No results to score yet - check back after matches are played.</p>
         </div>
       ) : (
         <>
@@ -279,7 +279,7 @@ function LeaderboardTable({ rows, mode, title, description }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// --- Page ---------------------------------------------------------------------
 
 export default function LeaderboardsPage() {
   const [outcomeLB, setOutcomeLB] = useState([]);
@@ -333,7 +333,7 @@ export default function LeaderboardsPage() {
           {lastUpdated && (
             <p className="lb-updated">
               Last refreshed: {lastUpdated.toLocaleTimeString()}
-              {' · '}
+              {' ? '}
               <button className="refresh-btn" onClick={load}>Refresh</button>
             </p>
           )}
@@ -342,13 +342,13 @@ export default function LeaderboardsPage() {
         {loading && (
           <div className="loading-state">
             <div className="loading-spinner" />
-            <p>Calculating standings…</p>
+            <p>Calculating standings?</p>
           </div>
         )}
 
         {error && !loading && (
           <div className="error-state">
-            <p>⚠️ {error}</p>
+            <p>?? {error}</p>
             <button className="retry-btn" onClick={load}>Try again</button>
           </div>
         )}
@@ -358,13 +358,13 @@ export default function LeaderboardsPage() {
             <LeaderboardTable
               rows={outcomeLB}
               mode="outcome"
-              title="⚽ Match Winner Leaderboard"
-              description="Predict the match outcome — home win, draw, or away win. +1 point per correct call."
+              title="? Match Winner Leaderboard"
+              description="Predict the match outcome - home win, draw, or away win. +1 point per correct call."
             />
             <LeaderboardTable
               rows={scoreLB}
               mode="score"
-              title="🎯 Exact Score Leaderboard"
+              title="? Exact Score Leaderboard"
               description="Predict the exact scoreline. Closer guesses still earn points."
             />
           </div>
@@ -374,7 +374,7 @@ export default function LeaderboardsPage() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// --- Styles -------------------------------------------------------------------
 
 const STYLES = `
   .lb-page {
