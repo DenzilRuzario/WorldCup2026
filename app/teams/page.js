@@ -1,200 +1,134 @@
 'use client';
 
-// app/teams/page.js
-// Teams page with Group Standings Tables.
-// Standings computed from the `results` table - no extra API calls.
-
-import { getSupabase } from '@/lib/supabase';
-import { TEAMS, GROUP_OVERVIEWS } from '@/lib/teams';
-import { computeGroupStandings } from '@/lib/standings';
 import { useEffect, useState } from 'react';
+import { T, GROUPS, DETAILS, TEAM } from '@/lib/teams';
+import { getSupabase } from '@/lib/supabase';
+import { computeGroupStandings } from '@/lib/standings';
 import Link from 'next/link';
 
-// --- helpers ----------------------------------------------------------------
-
-function getQualificationStatus(pos, totalTeams) {
-  // 2026 format: top 2 auto-qualify, 3rd place enters best-third playoff
-  if (pos === 1 || pos === 2) return 'auto';
-  if (pos === 3) return 'third';
-  return 'eliminated';
-}
-
-function QualBadge({ pos }) {
-  const status = getQualificationStatus(pos, 4);
-  if (status === 'auto') {
-    return (
-      <span className="qual-badge qual-auto" title="Advances to Round of 32">
-        ?
-      </span>
-    );
-  }
-  if (status === 'third') {
-    return (
-      <span className="qual-badge qual-third" title="Best third-place contender">
-        ?
-      </span>
-    );
-  }
-  return null;
-}
-
 function GDCell({ value }) {
-  const display = value > 0 ? `+${value}` : `${value}`;
-  const cls = value > 0 ? 'gd-pos' : value < 0 ? 'gd-neg' : 'gd-zero';
-  return <td className={`standings-td gd-cell ${cls}`}>{display}</td>;
+  const display = value > 0 ? '+' + value : String(value);
+  const color = value > 0 ? '#4ade80' : value < 0 ? '#f87171' : '#5a6080';
+  return <td className="std-td" style={{ fontWeight: 600, color }}>{display}</td>;
 }
 
-function StandingsTable({ group, rows, matchesPlayed }) {
-  const totalMatchdays = 3; // group stage: each team plays 3
-  const isComplete = rows.every((r) => r.played === totalMatchdays);
-  const hasStarted = rows.some((r) => r.played > 0);
+function StandingsTable({ rows }) {
+  const hasStarted = rows.some(r => r.played > 0);
+  const isComplete = rows.every(r => r.played === 3);
+  const pillLabel = !hasStarted ? 'Upcoming' : isComplete ? 'Complete' : 'In Progress';
+  const pillBg = !hasStarted ? 'rgba(90,96,128,0.2)' : isComplete ? 'rgba(245,197,24,0.15)' : 'rgba(74,222,128,0.15)';
+  const pillColor = !hasStarted ? '#5a6080' : isComplete ? '#f5c518' : '#4ade80';
 
   return (
-    <div className="standings-wrapper">
-      <div className="standings-status">
-        {!hasStarted && <span className="status-pill pill-upcoming">Upcoming</span>}
-        {hasStarted && !isComplete && <span className="status-pill pill-live">In Progress</span>}
-        {isComplete && <span className="status-pill pill-done">Group Complete</span>}
+    <div>
+      <div style={{ marginBottom: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', padding: '3px 10px', borderRadius: 20, background: pillBg, color: pillColor }}>
+          {pillLabel}
+        </span>
       </div>
-
-      <div className="table-scroll">
-        <table className="standings-table">
+      <div style={{ overflowX: 'auto' }}>
+        <table className="std-table">
           <thead>
             <tr>
-              <th className="th-pos">Pos</th>
-              <th className="th-team">Team</th>
-              <th className="th-num" title="Played">P</th>
-              <th className="th-num" title="Won">W</th>
-              <th className="th-num" title="Drawn">D</th>
-              <th className="th-num" title="Lost">L</th>
-              <th className="th-num" title="Goals For">GF</th>
-              <th className="th-num" title="Goals Against">GA</th>
-              <th className="th-num" title="Goal Difference">GD</th>
-              <th className="th-num th-pts" title="Points">Pts</th>
+              <th className="std-th" style={{ textAlign: 'left', width: 36 }}>Pos</th>
+              <th className="std-th" style={{ textAlign: 'left' }}>Team</th>
+              <th className="std-th" title="Played">P</th>
+              <th className="std-th" title="Won">W</th>
+              <th className="std-th" title="Drawn">D</th>
+              <th className="std-th" title="Lost">L</th>
+              <th className="std-th" title="Goals For">GF</th>
+              <th className="std-th" title="Goals Against">GA</th>
+              <th className="std-th" title="Goal Difference">GD</th>
+              <th className="std-th" style={{ color: '#c8a800' }} title="Points">Pts</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row, i) => {
               const pos = i + 1;
-              const status = getQualificationStatus(pos, rows.length);
+              const isAuto = pos <= 2;
+              const isThird = pos === 3;
+              const borderColor = isAuto ? '#4ade80' : isThird ? '#f59e0b' : 'transparent';
+              const posColor = isAuto ? '#4ade80' : isThird ? '#f59e0b' : '#5a6080';
+              const rowOpacity = !isAuto && !isThird && hasStarted ? 0.5 : 1;
+              const team = TEAM[row.team];
               return (
-                <tr
-                  key={row.team}
-                  className={`standings-row row-${status}`}
-                >
-                  <td className="standings-td td-pos">
-                    <span className={`pos-num pos-${status}`}>{pos}</span>
-                    <QualBadge pos={pos} />
+                <tr key={row.team} className="std-row" style={{ borderLeft: '3px solid ' + borderColor, opacity: rowOpacity }}>
+                  <td className="std-td" style={{ textAlign: 'left' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: posColor }}>{pos}</span>
                   </td>
-                  <td className="standings-td td-team">
-                    <span className="team-flag">{getFlagEmoji(row.team)}</span>
-                    <span className="team-name">{row.team}</span>
+                  <td className="std-td" style={{ textAlign: 'left', minWidth: 130 }}>
+                    <span style={{ marginRight: 6 }}>{team?.flag || ''}</span>
+                    <span style={{ fontWeight: 500, color: '#dde0f0' }}>{team?.name || row.team}</span>
                   </td>
-                  <td className="standings-td">{row.played}</td>
-                  <td className="standings-td">{row.won}</td>
-                  <td className="standings-td">{row.drawn}</td>
-                  <td className="standings-td">{row.lost}</td>
-                  <td className="standings-td">{row.gf}</td>
-                  <td className="standings-td">{row.ga}</td>
+                  <td className="std-td">{row.played}</td>
+                  <td className="std-td">{row.won}</td>
+                  <td className="std-td">{row.drawn}</td>
+                  <td className="std-td">{row.lost}</td>
+                  <td className="std-td">{row.gf}</td>
+                  <td className="std-td">{row.ga}</td>
                   <GDCell value={row.gd} />
-                  <td className="standings-td td-pts">{row.points}</td>
+                  <td className="std-td" style={{ fontWeight: 700, color: '#f5c518' }}>{row.points}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-
-      <div className="standings-legend">
-        <span className="legend-item">
-          <span className="legend-dot dot-auto" /> Advances
-        </span>
-        <span className="legend-item">
-          <span className="legend-dot dot-third" /> Best third contender
-        </span>
+      <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
+        {[['#4ade80', 'Advances'], ['#f59e0b', 'Best third contender']].map(([color, label]) => (
+          <span key={label} style={{ fontSize: 11, color: '#5a6080', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+            {label}
+          </span>
+        ))}
       </div>
     </div>
   );
 }
 
-// Simple flag emoji lookup by country name
-function getFlagEmoji(teamName) {
-  const flags = {
-    'United States': '??', 'USA': '??', 'Mexico': '??', 'Canada': '??',
-    'Germany': '??', 'France': '??', 'Spain': '??', 'England': '???????',
-    'Argentina': '??', 'Brazil': '??', 'Portugal': '??', 'Netherlands': '??',
-    'Belgium': '??', 'Italy': '??', 'Croatia': '??', 'Denmark': '??',
-    'Uruguay': '??', 'Colombia': '??', 'Ecuador': '??', 'Chile': '??',
-    'Peru': '??', 'Venezuela': '??', 'Bolivia': '??', 'Paraguay': '??',
-    'Morocco': '??', 'Senegal': '??', 'Nigeria': '??', 'Ghana': '??',
-    'Cameroon': '??', 'Egypt': '??', 'South Africa': '??', 'Mali': '??',
-    'Tunisia': '??', 'Algeria': '??', 'Ivory Coast': '??', 'DR Congo': '??',
-    'Japan': '??', 'South Korea': '??', 'Australia': '??', 'Iran': '??',
-    'Saudi Arabia': '??', 'Qatar': '??', 'Indonesia': '??', 'Uzbekistan': '??',
-    'New Zealand': '??', 'Switzerland': '??', 'Austria': '??', 'Poland': '??',
-    'T?rkiye': '??', 'Turkey': '??', 'Ukraine': '??', 'Czechia': '??',
-    'Slovakia': '??', 'Hungary': '??', 'Scotland': '???????', 'Serbia': '??',
-    'Romania': '??', 'Albania': '??', 'Georgia': '??', 'Panama': '??',
-    'Costa Rica': '??', 'Honduras': '??', 'Jamaica': '??',
-  };
-  return flags[teamName] || '??';
+function ScoutBlock({ label, text }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, color: '#f5c518', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700, marginBottom: 3 }}>{label}</div>
+      <p style={{ fontSize: 12, color: '#8a8ea8', lineHeight: 1.5, margin: 0 }}>{text}</p>
+    </div>
+  );
 }
 
-// --- Team Card (scouting info, collapsible) ----------------------------------
-
-function TeamCard({ team, data }) {
+function TeamCard({ team }) {
   const [open, setOpen] = useState(false);
+  const d = DETAILS[team.id] || {};
   return (
-    <div className={`team-card ${open ? 'team-card--open' : ''}`}>
-      <button
-        className="team-card__header"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <span className="team-card__flag">{getFlagEmoji(team)}</span>
-        <span className="team-card__name">{team}</span>
-        <span className="team-card__chevron">{open ? '?' : '?'}</span>
+    <div style={{ border: '1px solid ' + (open ? 'rgba(245,197,24,0.2)' : 'rgba(255,255,255,0.07)'), borderRadius: 8, overflow: 'hidden' }}>
+      <button onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: '#131929', border: 'none', padding: '10px 14px', color: '#dde0f0', fontSize: 13.5, fontWeight: 500, cursor: 'pointer', textAlign: 'left' }}>
+        <span style={{ fontSize: 16 }}>{team.flag}</span>
+        <span style={{ flex: 1 }}>{team.name}</span>
+        <span style={{ fontSize: 10, color: '#5a6080' }}>{open ? '▲' : '▼'}</span>
       </button>
-
       {open && (
-        <div className="team-card__body">
-          {data.intro && <p className="scout-intro">{data.intro}</p>}
-          <div className="scout-grid">
-            {data.style && (
-              <div className="scout-block">
-                <h4 className="scout-label">Style</h4>
-                <p>{data.style}</p>
-              </div>
-            )}
-            {data.strengths && (
-              <div className="scout-block">
-                <h4 className="scout-label">Strengths</h4>
-                <p>{data.strengths}</p>
-              </div>
-            )}
-            {data.weaknesses && (
-              <div className="scout-block">
-                <h4 className="scout-label">Weaknesses</h4>
-                <p>{data.weaknesses}</p>
-              </div>
-            )}
-            {data.outlook && (
-              <div className="scout-block">
-                <h4 className="scout-label">Outlook</h4>
-                <p>{data.outlook}</p>
-              </div>
-            )}
+        <div style={{ padding: '12px 14px 14px', background: '#0c1220' }}>
+          {d.intro
+            ? <p style={{ fontSize: 13, color: '#b0b4c8', lineHeight: 1.6, margin: '0 0 10px' }}>{d.intro}</p>
+            : <p style={{ fontSize: 13, color: '#b0b4c8', lineHeight: 1.6, margin: '0 0 10px' }}>{team.summary}</p>
+          }
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 8, marginBottom: 8 }}>
+            {d.style && <ScoutBlock label="Style" text={d.style} />}
+            {d.strengths && <ScoutBlock label="Strengths" text={d.strengths} />}
+            {d.weaknesses && <ScoutBlock label="Weaknesses" text={d.weaknesses} />}
+            {d.outlook && <ScoutBlock label="Outlook" text={d.outlook} />}
           </div>
-          {data.keyPlayers && (
-            <div className="scout-block">
-              <h4 className="scout-label">Key Players</h4>
-              <p>{data.keyPlayers}</p>
+          {d.keyPlayers && (
+            <div style={{ marginBottom: 6 }}>
+              <span style={{ fontSize: 10, color: '#f5c518', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700 }}>Key Players</span>
+              <p style={{ fontSize: 12, color: '#8a8ea8', margin: '3px 0 0' }}>
+                {Array.isArray(d.keyPlayers) ? d.keyPlayers.join(', ') : d.keyPlayers}
+              </p>
             </div>
           )}
-          {data.coach && (
-            <div className="scout-block">
-              <h4 className="scout-label">Coach</h4>
-              <p>{data.coach}</p>
+          {d.coach && (
+            <div>
+              <span style={{ fontSize: 10, color: '#f5c518', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700 }}>Coach</span>
+              <p style={{ fontSize: 12, color: '#8a8ea8', margin: '3px 0 0' }}>{d.coach}</p>
             </div>
           )}
         </div>
@@ -203,120 +137,103 @@ function TeamCard({ team, data }) {
   );
 }
 
-// --- Group Section ------------------------------------------------------------
-
-function GroupSection({ groupId, teams, overview, standingsRows }) {
+function GroupSection({ groupData, standingsRows }) {
   const [showScout, setShowScout] = useState(false);
-
   return (
-    <section className="group-section">
-      <div className="group-header">
-        <h2 className="group-title">Group {groupId}</h2>
-        {overview && <p className="group-overview">{overview}</p>}
+    <section style={{ background: '#0e1525', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ padding: '16px 20px 14px', borderBottom: showScout ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, color: '#f5c518', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Group {groupData.g}
+        </h2>
+        <StandingsTable rows={standingsRows} />
         <button
-          className="scout-toggle"
-          onClick={() => setShowScout((s) => !s)}
+          onClick={() => setShowScout(s => !s)}
+          style={{ marginTop: 12, fontSize: 12, color: '#5a9cf5', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
         >
-          {showScout ? 'Hide Team Scouting' : 'Show Team Scouting ?'}
+          {showScout ? 'Hide scouting reports' : 'Show scouting reports'}
         </button>
       </div>
-
-      <StandingsTable group={groupId} rows={standingsRows} />
-
       {showScout && (
-        <div className="scout-section">
-          <h3 className="scout-section-title">Team Scouting</h3>
-          <div className="team-cards-grid">
-            {teams.map((team) => (
-              <TeamCard key={team} team={team} data={TEAMS[team] || {}} />
-            ))}
-          </div>
+        <div style={{ padding: '12px 20px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {groupData.teams.map(team => <TeamCard key={team.id} team={team} />)}
         </div>
       )}
     </section>
   );
 }
 
-// --- Page ---------------------------------------------------------------------
+// Default zero-stats rows for a group
+function defaultRows(groupData) {
+  return groupData.teams.map(t => ({ team: t.id, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0 }));
+}
 
 export default function TeamsPage() {
   const [standingsByGroup, setStandingsByGroup] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Build group ? team list from TEAMS data
-  const teamsByGroup = {};
-  for (const [teamName, data] of Object.entries(TEAMS)) {
-    const g = data.group;
-    if (!g) continue;
-    if (!teamsByGroup[g]) teamsByGroup[g] = [];
-    teamsByGroup[g].push(teamName);
-  }
-  const groups = Object.keys(teamsByGroup).sort();
-
   useEffect(() => {
-    async function fetchResults() {
+    async function load() {
       try {
+        // Fetch matches from our own API (has group + team ids + status)
+        // and fetch stored results from Supabase
         const supabase = getSupabase();
-        const { data: results, error } = await supabase
-          .from('results')
-          .select('match_id, home_team, away_team, home_score, away_score, group, status')
-          .in('status', ['FT', 'AET', 'PEN', 'ft', 'aet', 'pen']);
-
-        if (error) throw error;
-
-        const computed = computeGroupStandings(results || [], teamsByGroup);
+        const [matchesRes, resultsRes] = await Promise.all([
+          fetch('/api/matches').then(r => r.ok ? r.json() : []),
+          supabase ? supabase.from('results').select('match_id,home,away') : Promise.resolve({ data: [] }),
+        ]);
+        const matches = Array.isArray(matchesRes) ? matchesRes : [];
+        const results = resultsRes?.data || [];
+        // Filter to group stage only
+        const groupMatches = matches.filter(m => m.group);
+        const computed = computeGroupStandings(groupMatches, results);
         setStandingsByGroup(computed);
-      } catch (err) {
-        console.error('Failed to load standings:', err);
-        // Fall back to zero-stats standings so table still renders
-        const fallback = {};
-        for (const [group, teams] of Object.entries(teamsByGroup)) {
-          fallback[group] = teams.map((team) => ({
-            team, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0,
-          }));
-        }
-        setStandingsByGroup(fallback);
+      } catch (e) {
+        console.error('Standings load error:', e);
       } finally {
         setLoading(false);
       }
     }
-    fetchResults();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    load();
   }, []);
 
   return (
     <>
-      <style>{STYLES}</style>
-      <main className="teams-page">
-        <header className="teams-hero">
-          <h1 className="teams-hero-title">Group Stage</h1>
-          <p className="teams-hero-sub">
-            48 teams ? 12 groups ? top 2 advance + 8 best third-place teams
-          </p>
-          <Link href="/leaderboards" className="hero-leaderboard-link">
-            ? View Prediction Leaderboards ?
+      <style>{`
+        .std-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .std-th { padding: 5px 5px; color: #5a6080; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .std-td { padding: 7px 5px; text-align: center; color: #c8cce0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .std-row:last-child .std-td { border-bottom: none; }
+        .std-row:hover { background: rgba(255,255,255,0.03); }
+        .spin { animation: spin 0.7s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 500px) {
+          .std-table { font-size: 11.5px; }
+          .std-th, .std-td { padding: 5px 3px; }
+        }
+      `}</style>
+      <main style={{ minHeight: '100vh', background: '#0a0f1e', color: '#e8eaf0', fontFamily: 'Inter,system-ui,sans-serif', paddingBottom: '4rem' }}>
+        <header style={{ textAlign: 'center', padding: '3rem 1.5rem 2rem', background: 'linear-gradient(180deg,#0d1428 0%,#0a0f1e 100%)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <h1 style={{ fontSize: 'clamp(1.8rem,5vw,2.4rem)', fontWeight: 800, letterSpacing: '-0.03em', background: 'linear-gradient(135deg,#f5c518 0%,#fff 60%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', margin: '0 0 6px' }}>
+            Group Stage
+          </h1>
+          <p style={{ color: '#7a8099', fontSize: 14, margin: '0 0 14px' }}>48 teams · 12 groups · top 2 advance + 8 best third-place teams</p>
+          <Link href="/leaderboards" style={{ display: 'inline-block', fontSize: 13, color: '#f5c518', textDecoration: 'none', border: '1px solid rgba(245,197,24,0.3)', padding: '5px 14px', borderRadius: 20 }}>
+            Prediction Leaderboards
           </Link>
         </header>
 
         {loading ? (
-          <div className="loading-state">
-            <div className="loading-spinner" />
-            <p>Loading standings?</p>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '5rem 1rem', color: '#5a6080', gap: 12 }}>
+            <div className="spin" style={{ width: 32, height: 32, border: '3px solid rgba(255,255,255,0.08)', borderTopColor: '#f5c518', borderRadius: '50%' }} />
+            <p style={{ margin: 0, fontSize: 14 }}>Loading standings...</p>
           </div>
         ) : (
-          <div className="groups-grid">
-            {groups.map((groupId) => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,560px),1fr))', gap: '1.5rem', maxWidth: 1280, margin: '2rem auto 0', padding: '0 1.5rem' }}>
+            {GROUPS.map(groupData => (
               <GroupSection
-                key={groupId}
-                groupId={groupId}
-                teams={teamsByGroup[groupId]}
-                overview={GROUP_OVERVIEWS?.[groupId]}
-                standingsRows={
-                  standingsByGroup[groupId] ||
-                  (teamsByGroup[groupId] || []).map((team) => ({
-                    team, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0,
-                  }))
-                }
+                key={groupData.g}
+                groupData={groupData}
+                standingsRows={standingsByGroup[groupData.g] || defaultRows(groupData)}
               />
             ))}
           </div>
@@ -325,329 +242,3 @@ export default function TeamsPage() {
     </>
   );
 }
-
-// --- Styles -------------------------------------------------------------------
-
-const STYLES = `
-  .teams-page {
-    min-height: 100vh;
-    background: #0a0f1e;
-    color: #e8eaf0;
-    font-family: 'Inter', system-ui, sans-serif;
-    padding-bottom: 4rem;
-  }
-
-  /* Hero */
-  .teams-hero {
-    text-align: center;
-    padding: 3rem 1.5rem 2rem;
-    background: linear-gradient(180deg, #0d1428 0%, #0a0f1e 100%);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-  .teams-hero-title {
-    font-size: 2.4rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    background: linear-gradient(135deg, #f5c518 0%, #ffffff 60%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin: 0 0 0.4rem;
-  }
-  .teams-hero-sub {
-    color: #7a8099;
-    font-size: 0.9rem;
-    margin: 0 0 1.2rem;
-  }
-  .hero-leaderboard-link {
-    display: inline-block;
-    font-size: 0.82rem;
-    color: #f5c518;
-    text-decoration: none;
-    border: 1px solid rgba(245,197,24,0.3);
-    padding: 0.35rem 0.9rem;
-    border-radius: 20px;
-    transition: background 0.2s;
-  }
-  .hero-leaderboard-link:hover {
-    background: rgba(245,197,24,0.1);
-  }
-
-  /* Groups grid - 2 columns on wide screens */
-  .groups-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 600px), 1fr));
-    gap: 2rem;
-    max-width: 1300px;
-    margin: 2.5rem auto 0;
-    padding: 0 1.5rem;
-  }
-
-  /* Group section */
-  .group-section {
-    background: #0e1525;
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .group-header {
-    padding: 1.25rem 1.25rem 1rem;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-  .group-title {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: #f5c518;
-    margin: 0 0 0.3rem;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-  }
-  .group-overview {
-    font-size: 0.8rem;
-    color: #7a8099;
-    margin: 0 0 0.75rem;
-    line-height: 1.5;
-  }
-  .scout-toggle {
-    font-size: 0.76rem;
-    color: #5a9cf5;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-
-  /* Status pills */
-  .standings-wrapper {
-    padding: 0.75rem 1.25rem 1rem;
-  }
-  .standings-status {
-    margin-bottom: 0.6rem;
-  }
-  .status-pill {
-    font-size: 0.68rem;
-    font-weight: 600;
-    padding: 0.2rem 0.55rem;
-    border-radius: 20px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-  .pill-upcoming { background: rgba(122,128,153,0.15); color: #7a8099; }
-  .pill-live { background: rgba(74,222,128,0.15); color: #4ade80; }
-  .pill-done { background: rgba(245,197,24,0.12); color: #f5c518; }
-
-  /* Table */
-  .table-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .standings-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.82rem;
-  }
-  .standings-table thead tr {
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-  }
-  .standings-table th {
-    padding: 0.4rem 0.5rem;
-    color: #5a6080;
-    font-weight: 600;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .th-pos { text-align: left; width: 48px; }
-  .th-team { text-align: left; }
-  .th-num { text-align: center; width: 32px; }
-  .th-pts { color: #c8a800 !important; }
-
-  .standings-td {
-    padding: 0.5rem 0.5rem;
-    text-align: center;
-    color: #c8cce0;
-  }
-  .td-pos {
-    text-align: left;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .td-team {
-    text-align: left;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 140px;
-  }
-  .td-pts {
-    font-weight: 700;
-    color: #f5c518 !important;
-  }
-
-  /* Row qualification highlighting */
-  .standings-row { transition: background 0.15s; }
-  .standings-row:hover { background: rgba(255,255,255,0.03); }
-
-  .row-auto {
-    border-left: 3px solid #4ade80;
-  }
-  .row-third {
-    border-left: 3px solid #f59e0b;
-  }
-  .row-eliminated {
-    border-left: 3px solid transparent;
-  }
-  .row-eliminated .team-name,
-  .row-eliminated .standings-td {
-    opacity: 0.55;
-  }
-
-  /* Position number */
-  .pos-num {
-    font-size: 0.78rem;
-    font-weight: 600;
-    width: 18px;
-    display: inline-block;
-    text-align: center;
-  }
-  .pos-auto { color: #4ade80; }
-  .pos-third { color: #f59e0b; }
-  .pos-eliminated { color: #5a6080; }
-
-  /* Qual badges */
-  .qual-badge {
-    font-size: 0.6rem;
-    border-radius: 3px;
-    padding: 0 3px;
-    font-weight: 700;
-  }
-  .qual-auto { color: #4ade80; }
-  .qual-third { color: #f59e0b; }
-
-  /* Team name */
-  .team-flag { font-size: 1rem; }
-  .team-name { font-weight: 500; color: #dde0f0; }
-
-  /* Goal difference */
-  .gd-cell { font-weight: 600; }
-  .gd-pos { color: #4ade80; }
-  .gd-neg { color: #f87171; }
-  .gd-zero { color: #7a8099; }
-
-  /* Legend */
-  .standings-legend {
-    display: flex;
-    gap: 1rem;
-    margin-top: 0.75rem;
-    font-size: 0.72rem;
-    color: #5a6080;
-  }
-  .legend-item { display: flex; align-items: center; gap: 5px; }
-  .legend-dot {
-    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
-  }
-  .dot-auto { background: #4ade80; }
-  .dot-third { background: #f59e0b; }
-
-  /* Scout section */
-  .scout-section { padding: 1rem 1.25rem 1.25rem; }
-  .scout-section-title {
-    font-size: 0.75rem;
-    color: #5a6080;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
-    margin: 0 0 0.75rem;
-  }
-  .team-cards-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .team-card {
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-  .team-card--open { border-color: rgba(245,197,24,0.2); }
-  .team-card__header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    background: #131929;
-    border: none;
-    padding: 0.65rem 0.9rem;
-    color: #dde0f0;
-    font-size: 0.85rem;
-    font-weight: 500;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.15s;
-  }
-  .team-card__header:hover { background: #1a2235; }
-  .team-card__flag { font-size: 1.1rem; }
-  .team-card__name { flex: 1; }
-  .team-card__chevron { color: #5a6080; font-size: 0.7rem; }
-  .team-card__body {
-    padding: 0.75rem 0.9rem 0.9rem;
-    background: #0c1220;
-  }
-  .scout-intro {
-    font-size: 0.82rem;
-    color: #b0b4c8;
-    line-height: 1.6;
-    margin: 0 0 0.75rem;
-  }
-  .scout-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 0.6rem;
-    margin-bottom: 0.6rem;
-  }
-  .scout-block { margin: 0; }
-  .scout-label {
-    font-size: 0.68rem;
-    color: #f5c518;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-weight: 700;
-    margin: 0 0 0.2rem;
-  }
-  .scout-block p {
-    font-size: 0.8rem;
-    color: #8a8ea8;
-    line-height: 1.5;
-    margin: 0;
-  }
-
-  /* Loading */
-  .loading-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 5rem 1rem;
-    color: #5a6080;
-    gap: 1rem;
-  }
-  .loading-spinner {
-    width: 36px; height: 36px;
-    border: 3px solid rgba(255,255,255,0.08);
-    border-top-color: #f5c518;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  @media (max-width: 600px) {
-    .teams-hero-title { font-size: 1.8rem; }
-    .groups-grid { gap: 1.25rem; padding: 0 0.75rem; }
-    .th-num { width: 24px; }
-    .standings-table { font-size: 0.76rem; }
-    .td-team { min-width: 110px; }
-  }
-`;
