@@ -4,7 +4,7 @@
 // Prediction Leaderboards - computed from Supabase votes + results tables.
 // No extra API calls. All calculations happen client-side from stored data.
 
-import { createClient } from '@/lib/supabase/client';
+import { getSupabase } from '@/lib/supabase';
 import { useEffect, useState, useCallback } from 'react';
 import { scoreExactPrediction, getOutcome } from '@/lib/standings';
 
@@ -292,7 +292,7 @@ export default function LeaderboardsPage() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = createClient();
+      const supabase = getSupabase();
 
       // Fetch all three tables in parallel
       const [votesRes, predsRes, resultsRes] = await Promise.all([
