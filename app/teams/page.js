@@ -2,7 +2,7 @@
 
 // app/teams/page.js
 // Teams page with Group Standings Tables.
-// Standings computed from the `results` table — no extra API calls.
+// Standings computed from the `results` table - no extra API calls.
 
 import { createClient } from '@/lib/supabase/client';
 import { TEAMS, GROUP_OVERVIEWS } from '@/lib/teams';
@@ -10,7 +10,7 @@ import { computeGroupStandings } from '@/lib/standings';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// --- helpers ----------------------------------------------------------------
 
 function getQualificationStatus(pos, totalTeams) {
   // 2026 format: top 2 auto-qualify, 3rd place enters best-third playoff
@@ -24,7 +24,7 @@ function QualBadge({ pos }) {
   if (status === 'auto') {
     return (
       <span className="qual-badge qual-auto" title="Advances to Round of 32">
-        ✓
+        ?
       </span>
     );
   }
@@ -120,27 +120,27 @@ function StandingsTable({ group, rows, matchesPlayed }) {
 // Simple flag emoji lookup by country name
 function getFlagEmoji(teamName) {
   const flags = {
-    'United States': '🇺🇸', 'USA': '🇺🇸', 'Mexico': '🇲🇽', 'Canada': '🇨🇦',
-    'Germany': '🇩🇪', 'France': '🇫🇷', 'Spain': '🇪🇸', 'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
-    'Argentina': '🇦🇷', 'Brazil': '🇧🇷', 'Portugal': '🇵🇹', 'Netherlands': '🇳🇱',
-    'Belgium': '🇧🇪', 'Italy': '🇮🇹', 'Croatia': '🇭🇷', 'Denmark': '🇩🇰',
-    'Uruguay': '🇺🇾', 'Colombia': '🇨🇴', 'Ecuador': '🇪🇨', 'Chile': '🇨🇱',
-    'Peru': '🇵🇪', 'Venezuela': '🇻🇪', 'Bolivia': '🇧🇴', 'Paraguay': '🇵🇾',
-    'Morocco': '🇲🇦', 'Senegal': '🇸🇳', 'Nigeria': '🇳🇬', 'Ghana': '🇬🇭',
-    'Cameroon': '🇨🇲', 'Egypt': '🇪🇬', 'South Africa': '🇿🇦', 'Mali': '🇲🇱',
-    'Tunisia': '🇹🇳', 'Algeria': '🇩🇿', 'Ivory Coast': '🇨🇮', 'DR Congo': '🇨🇩',
-    'Japan': '🇯🇵', 'South Korea': '🇰🇷', 'Australia': '🇦🇺', 'Iran': '🇮🇷',
-    'Saudi Arabia': '🇸🇦', 'Qatar': '🇶🇦', 'Indonesia': '🇮🇩', 'Uzbekistan': '🇺🇿',
-    'New Zealand': '🇳🇿', 'Switzerland': '🇨🇭', 'Austria': '🇦🇹', 'Poland': '🇵🇱',
-    'Türkiye': '🇹🇷', 'Turkey': '🇹🇷', 'Ukraine': '🇺🇦', 'Czechia': '🇨🇿',
-    'Slovakia': '🇸🇰', 'Hungary': '🇭🇺', 'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Serbia': '🇷🇸',
-    'Romania': '🇷🇴', 'Albania': '🇦🇱', 'Georgia': '🇬🇪', 'Panama': '🇵🇦',
-    'Costa Rica': '🇨🇷', 'Honduras': '🇭🇳', 'Jamaica': '🇯🇲',
+    'United States': '??', 'USA': '??', 'Mexico': '??', 'Canada': '??',
+    'Germany': '??', 'France': '??', 'Spain': '??', 'England': '???????',
+    'Argentina': '??', 'Brazil': '??', 'Portugal': '??', 'Netherlands': '??',
+    'Belgium': '??', 'Italy': '??', 'Croatia': '??', 'Denmark': '??',
+    'Uruguay': '??', 'Colombia': '??', 'Ecuador': '??', 'Chile': '??',
+    'Peru': '??', 'Venezuela': '??', 'Bolivia': '??', 'Paraguay': '??',
+    'Morocco': '??', 'Senegal': '??', 'Nigeria': '??', 'Ghana': '??',
+    'Cameroon': '??', 'Egypt': '??', 'South Africa': '??', 'Mali': '??',
+    'Tunisia': '??', 'Algeria': '??', 'Ivory Coast': '??', 'DR Congo': '??',
+    'Japan': '??', 'South Korea': '??', 'Australia': '??', 'Iran': '??',
+    'Saudi Arabia': '??', 'Qatar': '??', 'Indonesia': '??', 'Uzbekistan': '??',
+    'New Zealand': '??', 'Switzerland': '??', 'Austria': '??', 'Poland': '??',
+    'T?rkiye': '??', 'Turkey': '??', 'Ukraine': '??', 'Czechia': '??',
+    'Slovakia': '??', 'Hungary': '??', 'Scotland': '???????', 'Serbia': '??',
+    'Romania': '??', 'Albania': '??', 'Georgia': '??', 'Panama': '??',
+    'Costa Rica': '??', 'Honduras': '??', 'Jamaica': '??',
   };
-  return flags[teamName] || '🏳️';
+  return flags[teamName] || '??';
 }
 
-// ─── Team Card (scouting info, collapsible) ──────────────────────────────────
+// --- Team Card (scouting info, collapsible) ----------------------------------
 
 function TeamCard({ team, data }) {
   const [open, setOpen] = useState(false);
@@ -153,7 +153,7 @@ function TeamCard({ team, data }) {
       >
         <span className="team-card__flag">{getFlagEmoji(team)}</span>
         <span className="team-card__name">{team}</span>
-        <span className="team-card__chevron">{open ? '▲' : '▼'}</span>
+        <span className="team-card__chevron">{open ? '?' : '?'}</span>
       </button>
 
       {open && (
@@ -203,7 +203,7 @@ function TeamCard({ team, data }) {
   );
 }
 
-// ─── Group Section ────────────────────────────────────────────────────────────
+// --- Group Section ------------------------------------------------------------
 
 function GroupSection({ groupId, teams, overview, standingsRows }) {
   const [showScout, setShowScout] = useState(false);
@@ -217,7 +217,7 @@ function GroupSection({ groupId, teams, overview, standingsRows }) {
           className="scout-toggle"
           onClick={() => setShowScout((s) => !s)}
         >
-          {showScout ? 'Hide Team Scouting' : 'Show Team Scouting ▼'}
+          {showScout ? 'Hide Team Scouting' : 'Show Team Scouting ?'}
         </button>
       </div>
 
@@ -237,13 +237,13 @@ function GroupSection({ groupId, teams, overview, standingsRows }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// --- Page ---------------------------------------------------------------------
 
 export default function TeamsPage() {
   const [standingsByGroup, setStandingsByGroup] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Build group → team list from TEAMS data
+  // Build group ? team list from TEAMS data
   const teamsByGroup = {};
   for (const [teamName, data] of Object.entries(TEAMS)) {
     const g = data.group;
@@ -291,17 +291,17 @@ export default function TeamsPage() {
         <header className="teams-hero">
           <h1 className="teams-hero-title">Group Stage</h1>
           <p className="teams-hero-sub">
-            48 teams · 12 groups · top 2 advance + 8 best third-place teams
+            48 teams ? 12 groups ? top 2 advance + 8 best third-place teams
           </p>
           <Link href="/leaderboards" className="hero-leaderboard-link">
-            🏆 View Prediction Leaderboards →
+            ? View Prediction Leaderboards ?
           </Link>
         </header>
 
         {loading ? (
           <div className="loading-state">
             <div className="loading-spinner" />
-            <p>Loading standings…</p>
+            <p>Loading standings?</p>
           </div>
         ) : (
           <div className="groups-grid">
@@ -326,7 +326,7 @@ export default function TeamsPage() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// --- Styles -------------------------------------------------------------------
 
 const STYLES = `
   .teams-page {
@@ -373,7 +373,7 @@ const STYLES = `
     background: rgba(245,197,24,0.1);
   }
 
-  /* Groups grid — 2 columns on wide screens */
+  /* Groups grid - 2 columns on wide screens */
   .groups-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 600px), 1fr));
