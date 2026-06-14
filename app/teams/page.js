@@ -4,7 +4,7 @@
 // Teams page with Group Standings Tables.
 // Standings computed from the `results` table - no extra API calls.
 
-import { createClient } from '@/lib/supabase/client';
+import { getSupabase } from '@/lib/supabase';
 import { TEAMS, GROUP_OVERVIEWS } from '@/lib/teams';
 import { computeGroupStandings } from '@/lib/standings';
 import { useEffect, useState } from 'react';
@@ -256,7 +256,7 @@ export default function TeamsPage() {
   useEffect(() => {
     async function fetchResults() {
       try {
-        const supabase = createClient();
+        const supabase = getSupabase();
         const { data: results, error } = await supabase
           .from('results')
           .select('match_id, home_team, away_team, home_score, away_score, group, status')
