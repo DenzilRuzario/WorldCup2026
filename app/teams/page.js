@@ -1,10 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { T, GROUPS, DETAILS, TEAM } from '@/lib/teams';
-import { getSupabase } from '@/lib/supabase';
+import { GROUPS, DETAILS, TEAM } from '@/lib/teams';
 import { computeGroupStandings } from '@/lib/standings';
-import Link from 'next/link';
 
 function GDCell({ value }) {
   const display = value > 0 ? '+' + value : String(value);
@@ -174,18 +172,15 @@ export default function TeamsPage() {
   useEffect(() => {
     async function load() {
       try {
-        // Fetch matches from our own API (has group + team ids + status)
-        // and fetch stored results from Supabase
-        const supabase = getSupabase();
-        const [matchesRes, resultsRes] = await Promise.all([
-          fetch('/api/matches').then(r => r.ok ? r.json() : []),
-          supabase ? supabase.from('results').select('match_id,home,away') : Promise.resolve({ data: [] }),
-        ]);
-        const matches = Array.isArray(matchesRes) ? matchesRes : [];
-        const results = resultsRes?.data || [];
-        // Filter to group stage only
-        const groupMatches = matches.filter(m => m.group);
-        const computed = computeGroupStandings(groupMatches, results);
+        // Fetch matches from our own API. The route returns { source, matches },
+        // and the matches already carry persisted FT scores from Supabase, so
+        // we compute standings directly from them - no separate results query.
+        const res = await fetch('/api/matches');
+        const data = res.ok ? await res.json() : {};
+        const matches = Array.isArray(data.matches) ? data.matches : [];
+        // Only group-stage matches with both teams resolved
+        const groupMatches = matches.filter(m => m.group && m.h && m.a);
+        const computed = computeGroupStandings(groupMatches, []);
         setStandingsByGroup(computed);
       } catch (e) {
         console.error('Standings load error:', e);
@@ -216,10 +211,7 @@ export default function TeamsPage() {
           <h1 style={{ fontSize: 'clamp(1.8rem,5vw,2.4rem)', fontWeight: 800, letterSpacing: '-0.03em', background: 'linear-gradient(135deg,#f5c518 0%,#fff 60%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', margin: '0 0 6px' }}>
             Group Stage
           </h1>
-          <p style={{ color: '#7a8099', fontSize: 14, margin: '0 0 14px' }}>48 teams · 12 groups · top 2 advance + 8 best third-place teams</p>
-          <Link href="/leaderboards" style={{ display: 'inline-block', fontSize: 13, color: '#f5c518', textDecoration: 'none', border: '1px solid rgba(245,197,24,0.3)', padding: '5px 14px', borderRadius: 20 }}>
-            Prediction Leaderboards
-          </Link>
+          <p style={{ color: '#7a8099', fontSize: 14, margin: '0 0 4px' }}>48 teams · 12 groups · top 2 advance + 8 best third-place teams</p>
         </header>
 
         {loading ? (
