@@ -1,33 +1,34 @@
 'use client';
 
-// app/leaderboards/page.js
-// Prediction Leaderboards - computed from Supabase votes + results tables.
-// No extra API calls. All calculations happen client-side from stored data.
-
-import { getSupabase } from '@/lib/supabase';
 import { useEffect, useState, useCallback } from 'react';
-import { scoreExactPrediction, getOutcome } from '@/lib/standings';
+import { getSupabase } from '@/lib/supabase';
+import { TEAM } from '@/lib/teams';
+import { getOutcome, scoreExactPrediction } from '@/lib/standings';
 
-// --- Score prediction leaderboard utils -------------------------------------
+// votes table:             { match_id, pick ('h'|'d'|'a'), name }
+// score_predictions table: { match_id, name, home, away }
+// results table:           { match_id, home, away }
+// matches come from /api/matches: { id, h, a, hs, as, status, group, ... }
 
-function buildOutcomeLB(votes, results) {
-  // votes row: { user_name, match_id, vote } where vote is 'home'|'draw'|'away'
-  // results row: { match_id, home_score, away_score, status, home_team, away_team }
+function buildOutcomeLB(votes, matches) {
+  // Build finished match result map: match_id -> actual outcome ('h'|'d'|'a')
   const resultMap = {};
-  for (const r of results) {
-    if (!['FT','AET','PEN','ft','aet','pen'].includes(r.status)) continue;
-    resultMap[r.match_id] = getOutcome(Number(r.home_score), Number(r.away_score));
+  for (const m of matches) {
+    const isFt = m.status === 'ft' || m.status === 'FT';
+    if (isFt && m.hs !== null && m.as !== null) {
+      resultMap[String(m.id)] = getOutcome(m.hs, m.as);
+    }
   }
 
-  const users = {}; // name ? { name, total, correct }
+  const users = {};
   for (const v of votes) {
-    const name = v.user_name?.trim();
+    const name = v.name?.trim();
     if (!name) continue;
-    const actual = resultMap[v.match_id];
+    const actual = resultMap[String(v.match_id)];
     if (!users[name]) users[name] = { name, total: 0, correct: 0, points: 0 };
     if (actual !== undefined) {
       users[name].total++;
-      if (v.vote === actual) {
+      if (v.pick === actual) {
         users[name].correct++;
         users[name].points++;
       }
@@ -36,40 +37,38 @@ function buildOutcomeLB(votes, results) {
 
   return Object.values(users).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
-    return b.correct / (b.total || 1) - a.correct / (a.total || 1);
+    const accA = a.total ? a.correct / a.total : 0;
+    const accB = b.total ? b.correct / b.total : 0;
+    return accB - accA;
   });
 }
 
-function buildScoreLB(scorePredictions, results) {
-  // score_predictions row: { user_name, match_id, home_score, away_score }
-  const resultMap = {};
-  for (const r of results) {
-    if (!['FT','AET','PEN','ft','aet','pen'].includes(r.status)) continue;
-    resultMap[r.match_id] = r;
+function buildScoreLB(preds, matches) {
+  const matchMap = {};
+  for (const m of matches) {
+    const isFt = m.status === 'ft' || m.status === 'FT';
+    if (isFt && m.hs !== null && m.as !== null) {
+      matchMap[String(m.id)] = m;
+    }
   }
 
   const users = {};
-  for (const p of scorePredictions) {
-    const name = p.user_name?.trim();
+  for (const p of preds) {
+    const name = p.name?.trim();
     if (!name) continue;
-    const actual = resultMap[p.match_id];
-    if (!users[name]) {
-      users[name] = { name, total: 0, exact: 0, close: 0, points: 0, predictions: [] };
-    }
-    if (actual !== undefined) {
-      const pts = scoreExactPrediction(p.home_score, p.away_score, actual.home_score, actual.away_score);
+    const m = matchMap[String(p.match_id)];
+    if (!users[name]) users[name] = { name, total: 0, exact: 0, points: 0, predictions: [] };
+    if (m) {
+      const pts = scoreExactPrediction(p.home, p.away, m.hs, m.as);
       users[name].total++;
       users[name].points += pts;
       if (pts === 3) users[name].exact++;
-      if (pts >= 2) users[name].close++;
       users[name].predictions.push({
-        match_id: p.match_id,
-        home_team: actual.home_team,
-        away_team: actual.away_team,
-        pred_home: p.home_score,
-        pred_away: p.away_score,
-        act_home: actual.home_score,
-        act_away: actual.away_score,
+        match_id: m.id,
+        home_team: TEAM[m.h]?.name || m.h,
+        away_team: TEAM[m.a]?.name || m.a,
+        pred_home: p.home, pred_away: p.away,
+        act_home: m.hs, act_away: m.as,
         pts,
       });
     }
@@ -78,91 +77,70 @@ function buildScoreLB(scorePredictions, results) {
   return Object.values(users).sort((a, b) => b.points - a.points);
 }
 
-// --- Rank badge --------------------------------------------------------------
-
 function RankBadge({ rank }) {
-  if (rank === 1) return <span className="rank-badge rank-gold">?</span>;
-  if (rank === 2) return <span className="rank-badge rank-silver">?</span>;
-  if (rank === 3) return <span className="rank-badge rank-bronze">?</span>;
-  return <span className="rank-badge rank-num">{rank}</span>;
+  if (rank === 1) return <span style={{ fontSize: '1.1rem' }}>🥇</span>;
+  if (rank === 2) return <span style={{ fontSize: '1.1rem' }}>🥈</span>;
+  if (rank === 3) return <span style={{ fontSize: '1.1rem' }}>🥉</span>;
+  return <span style={{ fontSize: 13, fontWeight: 600, color: '#5a6080' }}>{rank}</span>;
 }
 
-// --- User Profile Modal ------------------------------------------------------
+function Avatar({ name, size = 26 }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: size, height: size, borderRadius: '50%',
+      background: 'linear-gradient(135deg,#1e3a5f,#2a4d7a)',
+      fontSize: size * 0.36, fontWeight: 700, color: '#a0c8ff', flexShrink: 0,
+    }}>
+      {name.slice(0, 2).toUpperCase()}
+    </span>
+  );
+}
 
 function UserModal({ user, mode, onClose }) {
   if (!user) return null;
-
   const accuracy = user.total > 0
     ? Math.round((mode === 'outcome' ? user.correct : user.exact) / user.total * 100)
     : 0;
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="Close">?</button>
-        <div className="modal-header">
-          <div className="modal-avatar">{user.name.slice(0,2).toUpperCase()}</div>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', backdropFilter: 'blur(4px)' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#0e1525', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '1.75rem', maxWidth: 520, width: '100%', maxHeight: '80vh', overflowY: 'auto', position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, background: 'rgba(255,255,255,0.08)', border: 'none', color: '#9aa0b8', width: 28, height: 28, borderRadius: '50%', fontSize: 12, cursor: 'pointer' }}>x</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+          <Avatar name={user.name} size={48} />
           <div>
-            <h2 className="modal-name">{user.name}</h2>
-            <p className="modal-type">
-              {mode === 'outcome' ? 'Match Outcome Predictor' : 'Exact Score Predictor'}
-            </p>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#f0f2ff', margin: '0 0 3px' }}>{user.name}</h2>
+            <p style={{ fontSize: 12, color: '#5a6080', margin: 0 }}>{mode === 'outcome' ? 'Match Outcome Predictions' : 'Exact Score Predictions'}</p>
           </div>
         </div>
-
-        <div className="modal-stats">
-          <div className="stat-chip">
-            <span className="stat-val">{user.total}</span>
-            <span className="stat-lbl">Predictions</span>
-          </div>
-          {mode === 'outcome' ? (
-            <div className="stat-chip">
-              <span className="stat-val">{user.correct}</span>
-              <span className="stat-lbl">Correct Outcomes</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+          {[
+            [user.total, 'Predictions'],
+            mode === 'outcome' ? [user.correct, 'Correct'] : [user.exact, 'Exact Scores'],
+            [user.points, 'Points', true],
+            [accuracy + '%', mode === 'outcome' ? 'Accuracy' : 'Exact Rate'],
+          ].map(([val, lbl, gold]) => (
+            <div key={lbl} style={{ background: gold ? 'rgba(245,197,24,0.07)' : '#131929', border: '1px solid ' + (gold ? 'rgba(245,197,24,0.25)' : 'rgba(255,255,255,0.07)'), borderRadius: 8, padding: '10px 14px', flex: 1, minWidth: 70, textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: gold ? '#f5c518' : '#f0f2ff' }}>{val}</div>
+              <div style={{ fontSize: 10, color: '#5a6080', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2 }}>{lbl}</div>
             </div>
-          ) : (
-            <>
-              <div className="stat-chip">
-                <span className="stat-val">{user.exact}</span>
-                <span className="stat-lbl">Exact Scores</span>
-              </div>
-              <div className="stat-chip">
-                <span className="stat-val">{user.close}</span>
-                <span className="stat-lbl">Near Misses (2pts)</span>
-              </div>
-            </>
-          )}
-          <div className="stat-chip stat-chip--pts">
-            <span className="stat-val">{user.points}</span>
-            <span className="stat-lbl">Total Points</span>
-          </div>
-          <div className="stat-chip">
-            <span className="stat-val">{accuracy}%</span>
-            <span className="stat-lbl">
-              {mode === 'outcome' ? 'Accuracy' : 'Exact Rate'}
-            </span>
-          </div>
+          ))}
         </div>
-
         {mode === 'score' && user.predictions?.length > 0 && (
-          <div className="modal-preds">
-            <h3 className="modal-preds-title">Score Predictions</h3>
-            <div className="preds-list">
-              {user.predictions.map((p, i) => (
-                <div key={i} className={`pred-row pred-pts-${p.pts}`}>
-                  <span className="pred-teams">
-                    {p.home_team} vs {p.away_team}
-                  </span>
-                  <span className="pred-scores">
-                    <span className="pred-label">Predicted:</span>{' '}
-                    <strong>{p.pred_home}-{p.pred_away}</strong>
-                    {' ? '}
-                    <span className="pred-label">Actual:</span>{' '}
-                    <strong>{p.act_home}-{p.act_away}</strong>
-                  </span>
-                  <span className={`pred-pts pts-${p.pts}`}>+{p.pts}pts</span>
-                </div>
-              ))}
+          <div>
+            <h3 style={{ fontSize: 11, color: '#5a6080', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>Score Predictions</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {user.predictions.map((p, i) => {
+                const ptColors = { 3: '#4ade80', 2: '#f5c518', 1: '#f59e0b', 0: '#374060' };
+                return (
+                  <div key={i} style={{ background: '#131929', borderRadius: 6, padding: '8px 12px', borderLeft: '3px solid ' + (ptColors[p.pts] || '#374060'), display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, color: '#9aa0b8', flex: 1 }}>{p.home_team} vs {p.away_team}</span>
+                    <span style={{ fontSize: 12, color: '#8a8ea8' }}>Pred: <strong style={{ color: '#dde0f0' }}>{p.pred_home}-{p.pred_away}</strong> · Actual: <strong style={{ color: '#dde0f0' }}>{p.act_home}-{p.act_away}</strong></span>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: ptColors[p.pts] + '22', color: ptColors[p.pts] }}>+{p.pts}pts</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -171,115 +149,74 @@ function UserModal({ user, mode, onClose }) {
   );
 }
 
-// --- Leaderboard Table --------------------------------------------------------
-
-function LeaderboardTable({ rows, mode, title, description }) {
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [visibleCount, setVisibleCount] = useState(10);
-
-  const visible = rows.slice(0, visibleCount);
+function LeaderboardTable({ rows, mode, title, description, scoringKey }) {
+  const [selected, setSelected] = useState(null);
+  const [visible, setVisible] = useState(10);
 
   return (
-    <section className="lb-section">
-      <div className="lb-header">
+    <section style={{ background: '#0e1525', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, padding: '20px 24px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div>
-          <h2 className="lb-title">{title}</h2>
-          <p className="lb-desc">{description}</p>
+          <h2 style={{ fontSize: 17, fontWeight: 700, color: '#f5c518', margin: '0 0 4px' }}>{title}</h2>
+          <p style={{ fontSize: 13, color: '#7a8099', margin: 0 }}>{description}</p>
         </div>
-        {mode === 'outcome' && (
-          <div className="lb-scoring-key">
-            <span className="scoring-rule"><span className="sr-pts">+1</span> Correct outcome</span>
-          </div>
-        )}
-        {mode === 'score' && (
-          <div className="lb-scoring-key">
-            <span className="scoring-rule"><span className="sr-pts">+3</span> Exact score</span>
-            <span className="scoring-rule"><span className="sr-pts">+2</span> 1-goal diff</span>
-            <span className="scoring-rule"><span className="sr-pts">+1</span> 2-goal diff</span>
-          </div>
-        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
+          {scoringKey.map(([pts, label]) => (
+            <span key={label} style={{ fontSize: 11, color: '#5a6080' }}>
+              <strong style={{ color: '#f5c518' }}>{pts}</strong> {label}
+            </span>
+          ))}
+        </div>
       </div>
 
       {rows.length === 0 ? (
-        <div className="lb-empty">
-          <p>No results to score yet - check back after matches are played.</p>
+        <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: '#4a5070', fontSize: 13 }}>
+          No scored predictions yet — check back after matches finish.
         </div>
       ) : (
         <>
-          <div className="lb-table-wrap">
-            <table className="lb-table">
-              <thead>
-                <tr>
-                  <th className="lth lth-rank">Rank</th>
-                  <th className="lth lth-name">Name</th>
-                  {mode === 'outcome' ? (
-                    <>
-                      <th className="lth lth-num">Predictions</th>
-                      <th className="lth lth-num">Correct</th>
-                    </>
-                  ) : (
-                    <>
-                      <th className="lth lth-num">Predictions</th>
-                      <th className="lth lth-num">Exact</th>
-                    </>
-                  )}
-                  <th className="lth lth-pts">Points</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((row, i) => {
-                  const rank = i + 1;
-                  const isTop3 = rank <= 3;
-                  return (
-                    <tr
-                      key={row.name}
-                      className={`lb-row ${isTop3 ? 'lb-row--top' : ''}`}
-                      onClick={() => setSelectedUser({ user: row, mode })}
-                      style={{ cursor: 'pointer' }}
-                      title="Click to view profile"
-                    >
-                      <td className="ltd ltd-rank">
-                        <RankBadge rank={rank} />
-                      </td>
-                      <td className="ltd ltd-name">
-                        <span className="lb-avatar">{row.name.slice(0,2).toUpperCase()}</span>
-                        {row.name}
-                      </td>
-                      <td className="ltd ltd-num">{row.total}</td>
-                      <td className="ltd ltd-num">
-                        {mode === 'outcome' ? row.correct : row.exact}
-                      </td>
-                      <td className="ltd ltd-pts">{row.points}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {rows.length > visibleCount && (
-            <button
-              className="show-more-btn"
-              onClick={() => setVisibleCount((n) => n + 10)}
-            >
-              Show more ({rows.length - visibleCount} remaining)
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                {[['Rank', 56, 'center'], ['Name', null, 'left'], ['Predictions', 90, 'center'], [mode === 'outcome' ? 'Correct' : 'Exact', 72, 'center'], ['Points', 72, 'center']].map(([h, w, align]) => (
+                  <th key={h} style={{ padding: '8px 16px', color: '#5a6080', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: align, width: w || 'auto' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(0, visible).map((row, i) => {
+                const rank = i + 1;
+                return (
+                  <tr key={row.name} onClick={() => setSelected(row)} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', background: rank <= 3 ? 'rgba(245,197,24,0.03)' : 'transparent' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = rank <= 3 ? 'rgba(245,197,24,0.03)' : 'transparent'}>
+                    <td style={{ padding: '10px 16px', textAlign: 'center' }}><RankBadge rank={rank} /></td>
+                    <td style={{ padding: '10px 16px', textAlign: 'left' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Avatar name={row.name} />
+                        <span style={{ fontWeight: 500, color: '#dde0f0' }}>{row.name}</span>
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 16px', textAlign: 'center', color: '#8a8ea8' }}>{row.total}</td>
+                    <td style={{ padding: '10px 16px', textAlign: 'center', color: '#8a8ea8' }}>{mode === 'outcome' ? row.correct : row.exact}</td>
+                    <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: 700, color: '#f5c518', fontSize: 15 }}>{row.points}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {rows.length > visible && (
+            <button onClick={() => setVisible(v => v + 10)} style={{ display: 'block', width: '100%', padding: '12px', background: 'none', border: 'none', borderTop: '1px solid rgba(255,255,255,0.05)', color: '#5a9cf5', fontSize: 13, cursor: 'pointer' }}>
+              Show more ({rows.length - visible} remaining)
             </button>
           )}
         </>
       )}
 
-      {selectedUser && (
-        <UserModal
-          user={selectedUser.user}
-          mode={selectedUser.mode}
-          onClose={() => setSelectedUser(null)}
-        />
-      )}
+      {selected && <UserModal user={selected} mode={mode} onClose={() => setSelected(null)} />}
     </section>
   );
 }
-
-// --- Page ---------------------------------------------------------------------
 
 export default function LeaderboardsPage() {
   const [outcomeLB, setOutcomeLB] = useState([]);
@@ -293,27 +230,24 @@ export default function LeaderboardsPage() {
     setError(null);
     try {
       const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase not configured');
 
-      // Fetch all three tables in parallel
-      const [votesRes, predsRes, resultsRes] = await Promise.all([
-        supabase.from('votes').select('user_name, match_id, vote'),
-        supabase.from('score_predictions').select('user_name, match_id, home_score, away_score'),
-        supabase
-          .from('results')
-          .select('match_id, home_team, away_team, home_score, away_score, status'),
+      const [matchesRes, votesRes, predsRes] = await Promise.all([
+        fetch('/api/matches').then(r => r.ok ? r.json() : []),
+        supabase.from('votes').select('match_id,pick,name'),
+        supabase.from('score_predictions').select('match_id,name,home,away'),
       ]);
 
       if (votesRes.error) throw votesRes.error;
       if (predsRes.error) throw predsRes.error;
-      if (resultsRes.error) throw resultsRes.error;
 
-      const results = resultsRes.data || [];
-      setOutcomeLB(buildOutcomeLB(votesRes.data || [], results));
-      setScoreLB(buildScoreLB(predsRes.data || [], results));
+      const matches = Array.isArray(matchesRes) ? matchesRes : [];
+      setOutcomeLB(buildOutcomeLB(votesRes.data || [], matches));
+      setScoreLB(buildScoreLB(predsRes.data || [], matches));
       setLastUpdated(new Date());
     } catch (err) {
-      console.error('Leaderboard load error:', err);
-      setError(err.message || 'Failed to load leaderboard data.');
+      console.error('Leaderboard error:', err);
+      setError(err.message || 'Failed to load leaderboards.');
     } finally {
       setLoading(false);
     }
@@ -322,460 +256,53 @@ export default function LeaderboardsPage() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <>
-      <style>{STYLES}</style>
-      <main className="lb-page">
-        <header className="lb-hero">
-          <h1 className="lb-hero-title">Leaderboards</h1>
-          <p className="lb-hero-sub">
-            Updated after every completed match
+    <main style={{ minHeight: '100vh', background: '#0a0f1e', color: '#e8eaf0', fontFamily: 'Inter,system-ui,sans-serif', paddingBottom: '4rem' }}>
+      <header style={{ textAlign: 'center', padding: '3rem 1.5rem 2rem', background: 'linear-gradient(180deg,#0d1428 0%,#0a0f1e 100%)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <h1 style={{ fontSize: 'clamp(1.8rem,5vw,2.4rem)', fontWeight: 800, letterSpacing: '-0.03em', background: 'linear-gradient(135deg,#f5c518 0%,#fff 60%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', margin: '0 0 6px' }}>
+          Leaderboards
+        </h1>
+        <p style={{ color: '#7a8099', fontSize: 14, margin: '0 0 6px' }}>Updated after every completed match</p>
+        {lastUpdated && (
+          <p style={{ fontSize: 12, color: '#4a5070', margin: 0 }}>
+            Refreshed {lastUpdated.toLocaleTimeString()} &nbsp;·&nbsp;
+            <button onClick={load} style={{ background: 'none', border: 'none', color: '#5a9cf5', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>Refresh</button>
           </p>
-          {lastUpdated && (
-            <p className="lb-updated">
-              Last refreshed: {lastUpdated.toLocaleTimeString()}
-              {' ? '}
-              <button className="refresh-btn" onClick={load}>Refresh</button>
-            </p>
-          )}
-        </header>
-
-        {loading && (
-          <div className="loading-state">
-            <div className="loading-spinner" />
-            <p>Calculating standings?</p>
-          </div>
         )}
+      </header>
 
-        {error && !loading && (
-          <div className="error-state">
-            <p>?? {error}</p>
-            <button className="retry-btn" onClick={load}>Try again</button>
-          </div>
-        )}
+      {loading && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '5rem 1rem', color: '#5a6080', gap: 12 }}>
+          <div style={{ width: 32, height: 32, border: '3px solid rgba(255,255,255,0.08)', borderTopColor: '#f5c518', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          <p style={{ margin: 0, fontSize: 14 }}>Calculating standings...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
 
-        {!loading && !error && (
-          <div className="lb-content">
-            <LeaderboardTable
-              rows={outcomeLB}
-              mode="outcome"
-              title="? Match Winner Leaderboard"
-              description="Predict the match outcome - home win, draw, or away win. +1 point per correct call."
-            />
-            <LeaderboardTable
-              rows={scoreLB}
-              mode="score"
-              title="? Exact Score Leaderboard"
-              description="Predict the exact scoreline. Closer guesses still earn points."
-            />
-          </div>
-        )}
-      </main>
-    </>
+      {error && !loading && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4rem 1rem', color: '#5a6080', gap: 12 }}>
+          <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
+          <button onClick={load} style={{ background: 'rgba(90,156,245,0.1)', border: '1px solid rgba(90,156,245,0.3)', color: '#5a9cf5', padding: '8px 18px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Try again</button>
+        </div>
+      )}
+
+      {!loading && !error && (
+        <div style={{ maxWidth: 860, margin: '2.5rem auto 0', padding: '0 1.5rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+          <LeaderboardTable
+            rows={outcomeLB}
+            mode="outcome"
+            title="Match Winner Leaderboard"
+            description="Predict home win, draw, or away win."
+            scoringKey={[['+1', 'correct outcome']]}
+          />
+          <LeaderboardTable
+            rows={scoreLB}
+            mode="score"
+            title="Exact Score Leaderboard"
+            description="Predict the exact scoreline. Closer guesses still earn points."
+            scoringKey={[['+3', 'exact score'], ['+2', '1-goal diff'], ['+1', '2-goal diff']]}
+          />
+        </div>
+      )}
+    </main>
   );
 }
-
-// --- Styles -------------------------------------------------------------------
-
-const STYLES = `
-  .lb-page {
-    min-height: 100vh;
-    background: #0a0f1e;
-    color: #e8eaf0;
-    font-family: 'Inter', system-ui, sans-serif;
-    padding-bottom: 4rem;
-  }
-
-  /* Hero */
-  .lb-hero {
-    text-align: center;
-    padding: 3rem 1.5rem 2rem;
-    background: linear-gradient(180deg, #0d1428 0%, #0a0f1e 100%);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-  .lb-hero-title {
-    font-size: 2.4rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    background: linear-gradient(135deg, #f5c518 0%, #fff 60%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin: 0 0 0.4rem;
-  }
-  .lb-hero-sub {
-    color: #7a8099;
-    font-size: 0.88rem;
-    margin: 0 0 0.5rem;
-  }
-  .lb-updated {
-    font-size: 0.75rem;
-    color: #4a5070;
-    margin: 0;
-  }
-  .refresh-btn {
-    background: none;
-    border: none;
-    color: #5a9cf5;
-    cursor: pointer;
-    font-size: 0.75rem;
-    text-decoration: underline;
-    padding: 0;
-  }
-
-  /* Content */
-  .lb-content {
-    max-width: 860px;
-    margin: 2.5rem auto 0;
-    padding: 0 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 2.5rem;
-  }
-
-  /* Leaderboard section */
-  .lb-section {
-    background: #0e1525;
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 14px;
-    overflow: hidden;
-  }
-  .lb-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    padding: 1.25rem 1.5rem 1rem;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-  .lb-title {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: #f5c518;
-    margin: 0 0 0.25rem;
-  }
-  .lb-desc {
-    font-size: 0.78rem;
-    color: #7a8099;
-    margin: 0;
-    line-height: 1.4;
-  }
-  .lb-scoring-key {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 3px;
-  }
-  .scoring-rule {
-    font-size: 0.72rem;
-    color: #5a6080;
-    display: flex;
-    gap: 5px;
-    align-items: center;
-  }
-  .sr-pts {
-    font-weight: 700;
-    color: #f5c518;
-    min-width: 20px;
-    text-align: right;
-  }
-
-  /* Empty */
-  .lb-empty {
-    padding: 2.5rem 1.5rem;
-    text-align: center;
-    color: #4a5070;
-    font-size: 0.85rem;
-  }
-
-  /* Table */
-  .lb-table-wrap { overflow-x: auto; }
-  .lb-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-  }
-  .lth {
-    padding: 0.5rem 1rem;
-    color: #5a6080;
-    font-weight: 600;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-  }
-  .lth-rank { width: 56px; text-align: center; }
-  .lth-name { text-align: left; }
-  .lth-num { width: 88px; text-align: center; }
-  .lth-pts { width: 72px; text-align: center; color: #c8a800; }
-
-  .lb-row {
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    transition: background 0.12s;
-  }
-  .lb-row:hover { background: rgba(255,255,255,0.04); }
-  .lb-row--top { background: rgba(245,197,24,0.04); }
-  .lb-row--top:hover { background: rgba(245,197,24,0.07); }
-
-  .ltd {
-    padding: 0.65rem 1rem;
-    text-align: center;
-    color: #c8cce0;
-  }
-  .ltd-rank { text-align: center; }
-  .ltd-name {
-    text-align: left;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #dde0f0;
-  }
-  .ltd-num { color: #8a8ea8; }
-  .ltd-pts {
-    font-weight: 700;
-    color: #f5c518;
-    font-size: 0.95rem;
-  }
-
-  /* Avatar */
-  .lb-avatar {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #1e3a5f, #2a4d7a);
-    font-size: 0.62rem;
-    font-weight: 700;
-    color: #a0c8ff;
-    flex-shrink: 0;
-  }
-
-  /* Rank badge */
-  .rank-badge {
-    font-size: 1.1rem;
-    display: inline-block;
-  }
-  .rank-num {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: #5a6080;
-  }
-
-  /* Show more */
-  .show-more-btn {
-    display: block;
-    width: 100%;
-    padding: 0.75rem;
-    background: none;
-    border: none;
-    border-top: 1px solid rgba(255,255,255,0.05);
-    color: #5a9cf5;
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .show-more-btn:hover { background: rgba(90,156,245,0.06); }
-
-  /* Modal */
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 1rem;
-    backdrop-filter: blur(4px);
-  }
-  .modal-card {
-    background: #0e1525;
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 16px;
-    padding: 1.75rem;
-    max-width: 520px;
-    width: 100%;
-    max-height: 80vh;
-    overflow-y: auto;
-    position: relative;
-  }
-  .modal-close {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    background: rgba(255,255,255,0.08);
-    border: none;
-    color: #9aa0b8;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    font-size: 0.75rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .modal-header {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1.25rem;
-  }
-  .modal-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #1e3a5f, #2a4d7a);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1rem;
-    font-weight: 700;
-    color: #a0c8ff;
-    flex-shrink: 0;
-  }
-  .modal-name {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: #f0f2ff;
-    margin: 0 0 0.15rem;
-  }
-  .modal-type {
-    font-size: 0.75rem;
-    color: #5a6080;
-    margin: 0;
-  }
-
-  /* Stats row */
-  .modal-stats {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-    margin-bottom: 1.25rem;
-  }
-  .stat-chip {
-    background: #131929;
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 8px;
-    padding: 0.6rem 0.9rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 80px;
-    flex: 1;
-  }
-  .stat-chip--pts {
-    border-color: rgba(245,197,24,0.25);
-    background: rgba(245,197,24,0.05);
-  }
-  .stat-val {
-    font-size: 1.3rem;
-    font-weight: 800;
-    color: #f0f2ff;
-  }
-  .stat-chip--pts .stat-val { color: #f5c518; }
-  .stat-lbl {
-    font-size: 0.65rem;
-    color: #5a6080;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    text-align: center;
-    margin-top: 2px;
-  }
-
-  /* Prediction list in modal */
-  .modal-preds-title {
-    font-size: 0.75rem;
-    color: #5a6080;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-weight: 600;
-    margin: 0 0 0.6rem;
-  }
-  .preds-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-  .pred-row {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    background: #131929;
-    border-radius: 6px;
-    padding: 0.5rem 0.75rem;
-    flex-wrap: wrap;
-    border-left: 3px solid transparent;
-  }
-  .pred-pts-3 { border-left-color: #4ade80; }
-  .pred-pts-2 { border-left-color: #f5c518; }
-  .pred-pts-1 { border-left-color: #f59e0b; }
-  .pred-pts-0 { border-left-color: #374060; }
-
-  .pred-teams {
-    font-size: 0.78rem;
-    color: #9aa0b8;
-    flex: 1;
-    min-width: 120px;
-  }
-  .pred-scores {
-    font-size: 0.78rem;
-    color: #9aa0b8;
-  }
-  .pred-scores strong { color: #dde0f0; }
-  .pred-label { color: #5a6080; }
-  .pred-pts {
-    font-size: 0.72rem;
-    font-weight: 700;
-    padding: 0.15rem 0.4rem;
-    border-radius: 4px;
-    flex-shrink: 0;
-  }
-  .pts-3 { background: rgba(74,222,128,0.12); color: #4ade80; }
-  .pts-2 { background: rgba(245,197,24,0.12); color: #f5c518; }
-  .pts-1 { background: rgba(245,158,11,0.12); color: #f59e0b; }
-  .pts-0 { background: rgba(55,64,96,0.4); color: #5a6080; }
-
-  /* Loading / error */
-  .loading-state, .error-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 5rem 1rem;
-    color: #5a6080;
-    gap: 1rem;
-    text-align: center;
-  }
-  .loading-spinner {
-    width: 36px; height: 36px;
-    border: 3px solid rgba(255,255,255,0.08);
-    border-top-color: #f5c518;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .retry-btn {
-    background: rgba(90,156,245,0.1);
-    border: 1px solid rgba(90,156,245,0.3);
-    color: #5a9cf5;
-    padding: 0.4rem 1rem;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.82rem;
-  }
-
-  @media (max-width: 600px) {
-    .lb-hero-title { font-size: 1.8rem; }
-    .lb-content { padding: 0 0.75rem; }
-    .lb-header { flex-direction: column; }
-    .lb-scoring-key { align-items: flex-start; flex-direction: row; flex-wrap: wrap; gap: 6px; }
-    .modal-card { padding: 1.25rem; }
-    .modal-stats { gap: 0.4rem; }
-    .stat-chip { min-width: 60px; padding: 0.5rem 0.6rem; }
-    .stat-val { font-size: 1.1rem; }
-  }
-`;
